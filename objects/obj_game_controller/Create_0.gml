@@ -2636,8 +2636,7 @@ apply_resolution = function(_answers) {
                 defender_strength: defensive_strength(_rb.b)
             });
         }
-        post("http://localhost:5055/resolve",
-             json_stringify({ year: year, questions: _qs }), "resolve2");
+        post("/resolve", { year: year, questions: _qs }, "resolve2");
         return;
     }
 

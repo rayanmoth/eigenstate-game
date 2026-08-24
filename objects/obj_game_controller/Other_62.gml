@@ -19,6 +19,12 @@ if (async_load[? "status"] != 0 || _st != 200) {
     add_log("The oracle is silent. (status "
           + string(async_load[? "status"]) + ", http " + string(_st) + ")");
     show_debug_message("raw: " + string(async_load[? "result"]));
+	
+	show_debug_message("status=" + string(async_load[? "status"])
+                 + " http=" + string(_st)
+                 + " url=" + SERVER_BASE);
+					 
+					 
     // never leave the player stranded mid-resolution
 	if (last_request == "newgame") {
         if (!server_spawn_tried && SERVER_SPAWN_ENABLED) {
@@ -329,8 +335,7 @@ if (last_request == "turn") {
     if (array_length(pending_scouts) > 0) {
         var _next = pending_scouts[0];
         array_delete(pending_scouts, 0, 1);
-        post("http://localhost:5055/scout",
-             json_stringify({ target: _next, year: year }), "scout");
+        post("/scout", { target: _next, year: year }, "scout");
         exit;
     }
 
