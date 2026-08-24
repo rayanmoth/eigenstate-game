@@ -1,0 +1,8 @@
+# GameMaker
+/cache/
+/temp/
+/output/
+/build/
+*.yyz
+*.zip
+.DS_Store
