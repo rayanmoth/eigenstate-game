@@ -283,7 +283,7 @@ if (scene == "title") {
     ui_text((640 - _tw) / 2, 70 + _bob, "EIGENSTATE", ui_col("you"), 640);
  
     ui_font("label");
-    var _sw = string_width("Demo Created by PARLOROID");
+    var _sw = string_width("Demo Created by MOTH & PARLOROID");
     ui_text((640 - _sw) / 2, 132 + _bob * 0.4,
             "Demo Created by PARLOROID", ui_col("faint"), 640);
  
