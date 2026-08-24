@@ -71,6 +71,8 @@ link_note = "";
 
 SERVER_BASE = "http://localhost:5055";
 //SERVER_BASE = "https://eigenstate-ten.vercel.app";
+
+SERVER_KEY = "100f7c1643dfb813c59b141b";
  
 // The authoritative world state. undefined until /newgame hands one back,
 // which is how the server knows to create one rather than load one.
@@ -961,6 +963,9 @@ post = function(_ep, _body, _which) {
  
     var _h = ds_map_create();
     ds_map_add(_h, "Content-Type", "application/json");
+    // only sent when configured; an unset key means an ungated server
+    if (SERVER_KEY != "") ds_map_add(_h, "X-Eigenstate-Key", SERVER_KEY);
+ 
     request_id = http_request(SERVER_BASE + _ep, "POST", _h,
                               json_stringify(_body));
     ds_map_destroy(_h);

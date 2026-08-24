@@ -23,6 +23,11 @@ if (async_load[? "status"] != 0 || _st != 200) {
 	show_debug_message("status=" + string(async_load[? "status"])
                  + " http=" + string(_st)
                  + " url=" + SERVER_BASE);
+	if (_st == 401) {
+        link = "down";
+        link_note = "This server needs a key the game does not have. "
+                  + "Check SERVER_KEY in Create_0.";
+    }			
 					 
 					 
     // never leave the player stranded mid-resolution
