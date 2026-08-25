@@ -84,7 +84,7 @@ retry_link = function() {
     link_note = "";
     starting = true;
     post("/newgame", {}, "newgame");
-    add_log("Reaching for the oracle again...");
+    if (server_retry_count <= 1) add_log("Reaching for the oracle again...");
 }
  
 LETTER_TITLE = "To the Regent of Eigenstate";
@@ -387,8 +387,12 @@ HELP_PAGES = [
 /// @desc Push the current settings at the actual engine. Called on load and
 /// whenever a value changes, so there is never a "press apply" step.
 settings_apply = function() {
-    if (window_get_fullscreen() != opt_fullscreen)
-        window_set_fullscreen(opt_fullscreen);
+    // Desktop only. In a browser the page owns fullscreen, because only the
+    // page receives the user gesture the browser requires.
+    if (os_type != os_browser) {
+        if (window_get_fullscreen() != opt_fullscreen)
+            window_set_fullscreen(opt_fullscreen);
+    }
     intro_speed = INTRO_SPEED_BASE * opt_textspeed;
  
     if (bgm != undefined && audio_is_playing(bgm))
@@ -425,28 +429,28 @@ settings_input = function() {
     }
  
     var _kind = SETTING_ROWS[set_pick][1];
+    var _row = SETTING_ROWS[set_pick][0];
+ 
     if (_kind == "toggle") {
         if (keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_left)
          || keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
-            if (set_pick == 0) opt_fullscreen = !opt_fullscreen;
-            if (set_pick == 4) opt_tutorial   = !opt_tutorial;
+            if (_row == "fullscreen")     opt_fullscreen = !opt_fullscreen;
+            if (_row == "offer tutorial") opt_tutorial   = !opt_tutorial;
             settings_apply(); settings_save(); sfx("snd_ui_confirm");
         }
     } else if (_step != 0) {
         var _d = _step * 0.02;
-        if (set_pick == 1) opt_music     = clamp(opt_music + _d, 0, 1);
-        if (set_pick == 2) opt_sfx       = clamp(opt_sfx + _d, 0, 1);
-        if (set_pick == 3) opt_textspeed = clamp(opt_textspeed + _d * 2, 0.25, 3);
+        if (_row == "music")      opt_music     = clamp(opt_music + _d, 0, 1);
+        if (_row == "sound")      opt_sfx       = clamp(opt_sfx + _d, 0, 1);
+        if (_row == "text speed") opt_textspeed = clamp(opt_textspeed + _d * 2, 0.25, 3);
         settings_apply();
-        // save on release rather than every frame
         if (keyboard_check_released(vk_right) || keyboard_check_released(vk_left))
             settings_save();
-        if (set_pick == 2 && keyboard_check_pressed(vk_right)) sfx("snd_ui_move");
+        if (_row == "sound" && keyboard_check_pressed(vk_right)) sfx("snd_ui_move");
     }
- 
-    return keyboard_check_pressed(vk_escape);
 }
- 
+	
+	
 /// @desc The settings panel. Takes its own footer so the title screen and
 ///       the in-game overlay can advertise different close keys.
 settings_panel_draw = function(_footer) {
@@ -455,30 +459,38 @@ settings_panel_draw = function(_footer) {
     ui_reserve(_sp, _slh + 4);
     var _lblw = string_width("offer tutorial") + 16;
  
-    for (var i = 0; i < array_length(SETTING_ROWS); i++) {
-        var _sel = (i == set_pick);
+    var _sel = (i == set_pick);
+        var _row = SETTING_ROWS[i][0];
         var _col = _sel ? ui_col("you") : ui_col("dim");
-        ui_text(_sp.x, _sp.cursor, (_sel ? "> " : "  ") + SETTING_ROWS[i][0],
-                _col, _lblw);
+        ui_text(_sp.x, _sp.cursor, (_sel ? "> " : "  ") + _row, _col, _lblw);
  
         var _vx = _sp.x + _lblw;
         if (SETTING_ROWS[i][1] == "toggle") {
-            var _on = (i == 0) ? opt_fullscreen : opt_tutorial;
+            var _on = (_row == "fullscreen") ? opt_fullscreen : opt_tutorial;
             ui_text(_vx, _sp.cursor, _on ? "on" : "off",
                     _on ? ui_col("ally") : ui_col("faint"));
         } else {
             var _v = opt_music;
-            if (i == 2) _v = opt_sfx;
-            if (i == 3) _v = opt_textspeed / 3.0;
+            if (_row == "sound")      _v = opt_sfx;
+            if (_row == "text speed") _v = opt_textspeed / 3.0;
             ui_meter(_vx, _sp.cursor + _slh * 0.4, 120, _v, ui_col("quantum"));
             var _shown = string(round(_v * 100)) + "%";
-            if (i == 3) _shown = string_format(opt_textspeed, 1, 2) + "x";
+            if (_row == "text speed") _shown = string_format(opt_textspeed, 1, 2) + "x";
             ui_text(_vx + 130, _sp.cursor, _shown, ui_col("faint"));
         }
         _sp.cursor += _slh + 4;
-    }
  
-    ui_text(_sp.x, ui_footer_y(_sp), _footer, ui_col("faint"), _sp.inner_w);
+    if (os_type == os_browser) {
+        ui_text(_sp.x, ui_footer_y(_sp),
+                "double-click the game for fullscreen", ui_col("faint"),
+                _sp.inner_w);
+        ui_text(_sp.x, ui_footer_y(_sp) - ui_line_h(), _footer,
+                ui_col("faint"), _sp.inner_w);
+    } else {
+        ui_text(_sp.x, ui_footer_y(_sp), _footer, ui_col("faint"), _sp.inner_w);
+    }
+    // (that needs ui_reserve(_sp, _slh * 2 + 4) at the top of the function
+    //  instead of _slh + 4, or the second line lands outside the panel)
 }
  
 // ---------- audio, defensively ----------
@@ -501,13 +513,24 @@ MENU_ITEMS = ["BEGIN", "SETTINGS", "QUIT"];
 menu_pick  = 0;
 menu_page  = "root";     // "root" | "settings" | "quantum"
  
-SETTING_ROWS = [
-    ["fullscreen",  "toggle"],
-    ["music",       "slider"],
-    ["sound",       "slider"],
-    ["text speed",  "slider"],
-    ["offer tutorial", "toggle"],
-];
+if (os_type == os_browser) {
+    // no fullscreen row: the page's corner button and double-click do it
+    SETTING_ROWS = [
+        ["music",          "slider"],
+        ["sound",          "slider"],
+        ["text speed",     "slider"],
+        ["offer tutorial", "toggle"],
+    ];
+} else {
+    SETTING_ROWS = [
+        ["fullscreen",     "toggle"],
+        ["music",          "slider"],
+        ["sound",          "slider"],
+        ["text speed",     "slider"],
+        ["offer tutorial", "toggle"],
+    ];
+}
+
 set_pick = 0;
  
 // ---------- the quantum explainer ----------
