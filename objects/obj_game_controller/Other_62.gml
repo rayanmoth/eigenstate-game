@@ -223,6 +223,24 @@ if (_q != undefined) {
     q_depth     = _q.circuit_depth;
     q_gatecount = _q.gate_count;
     q_shots     = _q.shots;
+
+    // WHAT THE ENGINE DID, said once rather than every month. Falling back to
+    // the local simulation is silent by design, because the month still
+    // happens -- so without this a player with a bad key never finds out.
+    if (variable_struct_exists(_q, "engine_note")) {
+        var _en = _q.engine_note;
+        if (_en != engine_last_note) {
+            engine_last_note = _en;
+            if (_en != "") add_log(_en, "ui");
+        }
+    }
+    if (variable_struct_exists(_q, "engine_used")) {
+        if (_q.engine_used && !engine_seen) {
+            engine_seen = true;
+            add_log("Your kingdoms are being measured on Moth's engine.", "ui");
+        }
+        if (!_q.engine_used) engine_seen = false;
+    }
 }
 
 // ---- the oath board -------------------------------------------------

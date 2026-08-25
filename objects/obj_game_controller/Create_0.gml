@@ -2,6 +2,9 @@
  
 randomise();
 display_set_gui_size(640, 360);
+// The letterbox around the application surface is painted by the runtime,
+// not by the page, so no CSS can reach it. Default is white.
+window_set_colour(make_colour_rgb(5, 7, 10));
 
 
 scene = "splash";          // "splash" | "title" | "intro" | "play"
@@ -87,6 +90,17 @@ SERVER_BASE = (os_type == os_browser)
             ? ""
             : "https://eigenstate-ten.vercel.app";
 SERVER_KEY  = "100f7c1643dfb813c59b141b";
+
+engine_last_note = "";     // so a warning is said once, not every month
+engine_seen      = false;  // have we told them the engine IS running?
+
+// THE PLAYER'S OWN MOTH KEY. Sent as a header on every request, because the
+// server is stateless and stores nothing between them. Empty means the world
+// runs on the local simulation, which is the default and costs nobody
+// anything. Stored in the settings ini in plain text, on the player's own
+// machine, and in a browser that means their own browser storage.
+moth_key    = "";
+key_request = -1;      // the get_string_async handle, -1 when no dialog is up
  
 // The authoritative world state. undefined until /newgame hands one back,
 // which is how the server knows to create one rather than load one.
@@ -381,6 +395,7 @@ settings_load = function() {
     opt_sfx        = ini_read_real("audio", "sfx",   0.8);
     opt_textspeed  = ini_read_real("text",  "speed", 1.0);
     opt_tutorial   = bool(ini_read_real("game",  "tutorial", 1));
+	moth_key       = ini_read_string("moth", "key", "");
     ini_close();
     settings_apply();
 }
@@ -392,6 +407,7 @@ settings_save = function() {
     ini_write_real("audio", "sfx",   opt_sfx);
     ini_write_real("text",  "speed", opt_textspeed);
     ini_write_real("game",  "tutorial", opt_tutorial ? 1 : 0);
+	ini_write_string("moth", "key", moth_key);
     ini_close();
 }
 
@@ -489,12 +505,23 @@ settings_input = function() {
     var _row  = SETTING_ROWS[set_pick][0];
  
     if (_kind == "action") {
-        // ENTER ONLY. Not left or right: an action row has no value to
-        // nudge, and quitting on a stray arrow key would be unforgivable.
+    // ENTER ONLY. Not left or right: an action row has no value to
+    // nudge, and quitting on a stray arrow key would be unforgivable.
         if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
             if (_row == "quit game") { sfx("snd_ui_confirm"); game_end(); }
+
+            if (_row == "quantum key") {
+                sfx("snd_ui_confirm");
+                // A NATIVE DIALOG RATHER THAN IN-GAME TYPING, because an API
+                // key is forty-odd characters the player will paste, and
+                // keyboard_string cannot see a paste in a browser.
+                key_request = get_string_async(
+                      "Your Moth API key. The game sends it with each month, "
+                    + "so your own kingdoms are measured on Moth's engine "
+                    + "instead of the local simulation. Leave it empty to "
+                    + "stay local.", moth_key);
+            }
         }
- 
     } else if (_kind == "toggle") {
         if (keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_left)
          || keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
@@ -544,12 +571,19 @@ settings_panel_draw = function(_footer) {
  
         var _vx = _sp.x + _lblw;
  
-        // ROWS ARE ADDRESSED BY NAME, not index, for the same reason as in
-        // settings_input.
         if (_knd == "action") {
-            // no value, just the confirm hint, and only when it is selected
-            if (_sel) ui_text(_vx, _sp.cursor, "ENTER", ui_col("faint"));
- 
+            if (_row == "quantum key") {
+                // masked. Enough to see WHICH key is loaded, useless if the
+                // screenshot gets shared.
+                var _ks = "local sim";
+                if (moth_key != "")
+                    _ks = "set  ****" + string_copy(moth_key,
+                              max(1, string_length(moth_key) - 3), 4);
+                ui_text(_vx, _sp.cursor, _ks,
+                        (moth_key == "") ? ui_col("faint") : ui_col("quantum"));
+            } else if (_sel) {
+                ui_text(_vx, _sp.cursor, "ENTER", ui_col("faint"));
+            }
         } else if (_knd == "toggle") {
             var _on = opt_tutorial;
             ui_text(_vx, _sp.cursor, _on ? "on" : "off",
@@ -606,6 +640,7 @@ if (os_type == os_browser) {
         ["sound",          "slider"],
         ["text speed",     "slider"],
         ["offer tutorial", "toggle"],
+		["quantum key",    "action"],
     ];
 } else {
     SETTING_ROWS = [
@@ -1119,6 +1154,9 @@ post = function(_ep, _body, _which) {
     ds_map_add(_h, "Content-Type", "application/json");
     // only sent when configured; an unset key means an ungated server
     if (SERVER_KEY != "") ds_map_add(_h, "X-Eigenstate-Key", SERVER_KEY);
+	
+	// The player's own key, per request. Never stored server-side.
+    if (moth_key != "") ds_map_add(_h, "X-Moth-Token", moth_key);
  
     request_id = http_request(SERVER_BASE + _ep, "POST", _h,
                               json_stringify(_body));
