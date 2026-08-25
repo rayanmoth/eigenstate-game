@@ -311,7 +311,7 @@ if (audience_of != -1) {
                     if (_js != -1) {
                         jester_music = audio_play_sound(_js, 1, true);
                         audio_sound_gain(jester_music, opt_music * JESTER_GAIN, 0);
-						audio_sound_pitch(jester_music, 1.2);
+						audio_sound_pitch(jester_music, JESTER_PITCH);
                     }
                 }
             break;

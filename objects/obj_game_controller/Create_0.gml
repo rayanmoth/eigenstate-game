@@ -51,6 +51,8 @@ MEASURE_HOLD_REQ   = 0.6;  // quick -- a beat, not a whole minigame
 measuring_revealed = false;
 measuring_incoming = false;
 
+JESTER_PITCH = 1;
+
 bias_word = function(_b) {
     if (_b >  0.5)  return "the odds favour you";
     if (_b >  0.15) return "the odds lean your way";
