@@ -61,6 +61,7 @@
     {"id":{"name":"snd_bgm","path":"sounds/snd_bgm/snd_bgm.yy",},},
     {"id":{"name":"snd_boom","path":"sounds/snd_boom/snd_boom.yy",},},
     {"id":{"name":"snd_jester","path":"sounds/snd_jester/snd_jester.yy",},},
+    {"id":{"name":"snd_page","path":"sounds/snd_page/snd_page.yy",},},
     {"id":{"name":"snd_throne_bgm","path":"sounds/snd_throne_bgm/snd_throne_bgm.yy",},},
     {"id":{"name":"snd_ui_confirm","path":"sounds/snd_ui_confirm/snd_ui_confirm.yy",},},
     {"id":{"name":"snd_ui_move","path":"sounds/snd_ui_move/snd_ui_move.yy",},},

@@ -37,6 +37,7 @@
     {"name":"obj_game_controller","order":1,"path":"objects/obj_game_controller/obj_game_controller.yy",},
     {"name":"snd_boom","order":2,"path":"sounds/snd_boom/snd_boom.yy",},
     {"name":"snd_jester","order":1,"path":"sounds/snd_jester/snd_jester.yy",},
+    {"name":"snd_page","order":3,"path":"sounds/snd_page/snd_page.yy",},
     {"name":"snd_throne_bgm","order":2,"path":"sounds/snd_throne_bgm/snd_throne_bgm.yy",},
     {"name":"snd_ui_confirm","order":1,"path":"sounds/snd_ui_confirm/snd_ui_confirm.yy",},
     {"name":"spr_boom","order":1,"path":"sprites/spr_boom/spr_boom.yy",},
