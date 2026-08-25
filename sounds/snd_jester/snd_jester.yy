@@ -10,7 +10,7 @@
   "compression":0,
   "compressionQuality":4,
   "conversionMode":0,
-  "duration":361.44037,
+  "duration":9.729751,
   "exportDir":"",
   "name":"snd_jester",
   "parent":{
@@ -20,7 +20,7 @@
   "preload":false,
   "resourceType":"GMSound",
   "resourceVersion":"2.0",
-  "sampleRate":11025,
+  "sampleRate":44100,
   "soundFile":"snd_jester.wav",
   "volume":1.0,
 }

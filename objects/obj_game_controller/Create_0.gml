@@ -2071,7 +2071,7 @@ audience_open = function(_i) {
 		throne_bgm = audio_play_sound(snd_throne_bgm, 1, true);
 		audio_sound_gain(throne_bgm, 0, 0);
 	}
-	audio_sound_gain(throne_bgm, 0.8, 600);
+	audio_sound_gain(throne_bgm, opt_music * 0.8, 600);
 }
 
 /// The single exit path out of an audience -- so the music always comes
@@ -2082,7 +2082,7 @@ audience_close = function() {
     audience_of = -1;
     if (throne_bgm != undefined && audio_is_playing(throne_bgm))
         audio_sound_gain(throne_bgm, 0, 600);
-    if (bgm != undefined && audio_is_playing(bgm)) audio_sound_gain(bgm, 0.8, 600);
+    if (bgm != undefined && audio_is_playing(bgm)) audio_sound_gain(bgm, opt_music, 600);
 }
 
 
@@ -2192,7 +2192,7 @@ jester_bit_abort = function() {
     // owe it is a handle in a sane state. If the player is staying in the
     // court, FIX 4's "return" case is what brings it back up.
     if (throne_bgm != undefined && audio_is_playing(throne_bgm))
-        audio_sound_gain(throne_bgm, 0.8, 300);
+		audio_sound_gain(throne_bgm, opt_music * 0.8, 300);
 }
  
 /// @desc How far the ruler is pushed off frame, 0 = in place, 1 = fully out.
@@ -3309,6 +3309,6 @@ post("/newgame", {}, "newgame");
 add_log("Measuring the world into being...", "ui");
 
 bgm = audio_play_sound(snd_bgm, 1, true);   // 1 = priority, true = loop
-audio_sound_gain(bgm, 0.8, 0);              // half volume; music sits under UI
+audio_sound_gain(bgm, opt_music, 0);
 
 settings_apply();
