@@ -382,9 +382,15 @@ if (scene == "intro") {
     var _lh = ui_line_h();
  
     // --- heading, in the decorative face ---
+    // the parchment runs 62..578, and the text starts at 85, so this is the
+    // real room available -- not 540, which was wider than the page
+    var _t_room = 578 - 85 - 8;
+ 
     ui_font("title");
-    var _title_h = string_height("Ay");     // measured while THIS font is active
-    ui_text(85, 26, LETTER_TITLE, fx_dim(ui_col("you"), _cand), 540);
+    if (string_width(LETTER_TITLE) > _t_room) ui_font("display");
+    if (string_width(LETTER_TITLE) > _t_room) ui_font("body");
+    var _title_h = string_height("Ay");     // measured in whichever won
+    ui_text(85, 26, LETTER_TITLE, fx_dim(ui_col("you"), _cand), _t_room);
     ui_font("body");
 
     // --- the letter, revealed a character at a time ---
@@ -510,6 +516,14 @@ if (audience_of != -1) {
 	// one slow breath, about four seconds. Applied to the ruler and the
     // crown identically so they never come apart.
     var _pdy = fx_bob(0.26, 1.6);
+	
+	// CLIP TO THE FRAME. Everything below is offset by _pdx/_pdy and would
+    // otherwise draw over the roster and the top bar. Anything outside these
+    // bounds is discarded rather than drawn, so a ruler sliding out simply
+    // disappears at the edge instead of gliding across the UI.
+    var _clip_prev = gpu_get_scissor();
+    gpu_set_scissor(_ax, _ay, _aw, _ah);
+	gpu_set_scissor(_clip_prev);
  
     var _hall_spr = portrait_sprite("hall", _f.hall);
     var _person_layers = [ ["build",  _f.build],

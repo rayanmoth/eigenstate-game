@@ -1484,16 +1484,19 @@ plan_room = function() {
 plan_add = function(_verb, _a, _b, _cost = 1) {
     if (_cost > 0 && plan_room() < _cost) {
         add_log("No more resolve this month.");
+        sfx("snd_ui_move");          // a refusal still makes a noise
         return false;
     }
     array_push(plan, { verb: _verb, a: _a, b: _b, cost: _cost });
+    sfx("snd_ui_confirm");
     return true;
 }
 
 plan_undo = function() {
-    if (array_length(plan) == 0) return;
+    if (array_length(plan) == 0) { sfx("snd_ui_move"); return; }
     var _p = plan[array_length(plan) - 1];
     array_pop(plan);
+    sfx("snd_ui_move");
     add_log("You reconsider: " + _p.verb + " withdrawn.");
 }
 
@@ -1560,6 +1563,8 @@ event_art = function(_kind) {
     if (_kind == "rebellion") return spr_vig_rebellion;
     if (_kind == "coalition") return spr_vig_coalition;
     if (_kind == "quiet")     return spr_vig_quiet;
+	if (_kind == "lean")    return spr_vig_lean;
+	if (_kind == "reckoning")    return spr_vig_reckoning;
     return -1;   // -1 means "draw the placeholder frame"
 }
 
@@ -1956,6 +1961,7 @@ audience_gossip_self = function(_i, _cand) {
 // ============================================================
 
 audience_open = function(_i) {
+	sfx("snd_ui_confirm");
     if (_i == ME) return;
 	if (!variable_struct_exists(factions[_i], "head")) {
 		add_log("That court has not been measured into being yet.");
@@ -1987,6 +1993,7 @@ audience_open = function(_i) {
 /// The single exit path out of an audience -- so the music always comes
 /// back up, however the audience ends (ESC, or the "aud_leave" option).
 audience_close = function() {
+	sfx("snd_ui_move");
 	if (jbit != "") jester_bit_abort();
     audience_of = -1;
     if (throne_bgm != undefined && audio_is_playing(throne_bgm))
@@ -2121,6 +2128,7 @@ jester_ruler_out = function() {
 // Outcomes differ by relationship and by who is stronger. Nothing here is
 // a flat success roll.
 audience_do = function(_ch) {
+	sfx("snd_ui_confirm");
     var _i = audience_of;
     var _f = factions[_i];
     var _me = factions[ME];

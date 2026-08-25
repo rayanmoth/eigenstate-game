@@ -201,8 +201,10 @@ if (overlay != "") {
         var _hlast = array_length(HELP_PAGES) + array_length(QUANTUM_PAGES) - 1;
         if (keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_space))
             help_page = min(help_page + 1, _hlast);
+			sfx("snd_ui_move");
         if (keyboard_check_pressed(vk_left))
             help_page = max(help_page - 1, 0);
+			sfx("snd_ui_move");
     }
 	
     if (keyboard_check_pressed(vk_escape)) overlay = "";
@@ -283,8 +285,14 @@ if (audience_of != -1) {
     }
 	
     var _n = array_length(audience_opts);
-    if (keyboard_check_pressed(vk_down)) audience_pick = (audience_pick + 1) mod _n;
-    if (keyboard_check_pressed(vk_up))   audience_pick = (audience_pick - 1 + _n) mod _n;
+    if (keyboard_check_pressed(vk_down)){
+		audience_pick = (audience_pick + 1) mod _n;
+		sfx("snd_ui_move");
+	}
+    if (keyboard_check_pressed(vk_up)){   
+		audience_pick = (audience_pick - 1 + _n) mod _n;
+		sfx("snd_ui_move");
+	}
     if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space))
         audience_do(audience_opts[audience_pick]);
     if (keyboard_check_pressed(vk_escape)) audience_close();
@@ -352,11 +360,13 @@ if (phase == "events") {
             // captures anything.
             var _ch = event_current.choices[event_pick];
             apply_choice(_ch);
+			sfx("snd_ui_confirm");
             event_current = undefined;
         }
     } else {
         if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space))
             event_current = undefined;
+			sfx("snd_ui_move");
     }
     exit;
 }
@@ -372,7 +382,9 @@ if (phase == "measuring") {
     if (!measuring_revealed) {
         if (keyboard_check(vk_space)) {
             measuring_hold += _dt;
-            if (measuring_hold >= MEASURE_HOLD_REQ) measuring_revealed = true;
+            if (measuring_hold >= MEASURE_HOLD_REQ) {
+                measuring_revealed = true;
+                sfx("snd_boom");
         } else {
             measuring_hold = 0;
         }
@@ -508,7 +520,7 @@ if (lean_mode) {
 for (var k = 1; k < N; k++) {
     if (!keyboard_check_pressed(ord(string(k)))) continue;
 
-    if (pending_verb == "") { selected = k; break; }
+    if (pending_verb == "") { selected = k; sfx("snd_ui_move"); break; }
 
     if (!is_active(k) && pending_verb != "espy") {
         add_log(factions[k].name + " is in no position to answer.");
@@ -556,20 +568,28 @@ for (var k = 1; k < N; k++) {
 
 // ---- verbs ----
 if (plan_room() > 0) {
-    if (keyboard_check_pressed(ord("A"))) { pending_verb = "attack"; pending_first = -1; }
-    if (keyboard_check_pressed(ord("S"))) { pending_verb = "aid";    pending_first = -1; }
-    if (keyboard_check_pressed(ord("B"))) { pending_verb = "bind";   pending_first = -1; }
-    if (keyboard_check_pressed(ord("E"))) { pending_verb = "espy";   pending_first = -1; }
-    if (keyboard_check_pressed(ord("O"))) { pending_verb = "oath";   pending_first = -1; }
-	
+    var _vk = "";
+    if (keyboard_check_pressed(ord("A"))) _vk = "attack";
+    if (keyboard_check_pressed(ord("S"))) _vk = "aid";
+    if (keyboard_check_pressed(ord("B"))) _vk = "bind";
+    if (keyboard_check_pressed(ord("E"))) _vk = "espy";
+    if (keyboard_check_pressed(ord("O"))) _vk = "oath";
+    if (_vk != "") {
+        pending_verb = _vk;
+        pending_first = -1;
+        sfx("snd_ui_move");
+    }
+ 
     if (keyboard_check_pressed(ord("F"))) {
         if (array_length(board) == 0) {
             add_log("Nothing is being sworn anywhere. There is nothing to lean on.");
+            sfx("snd_ui_move");
         } else {
             lean_mode  = true;
             lean_pick  = 0;
             oath_field = 0;
             pending_verb = ""; pending_first = -1;
+            sfx("snd_ui_confirm");
         }
     }
 }
@@ -597,6 +617,7 @@ if (keyboard_check_pressed(vk_backspace)) plan_undo();
 if (keyboard_check_pressed(vk_enter)) {
     pending_verb = ""; pending_first = -1;
     phase = "resolving";
+	sfx("snd_ui_confirm");
 
     // Ask the quantum state for this year's outcomes BEFORE any classical
     // bookkeeping: who moves, and how each battle lands.
