@@ -11,6 +11,13 @@
 
 music_kick();
 
+// R RETRIES THE HANDSHAKE. Two link_note strings tell the player to press
+// it and nothing was listening.
+if (link == "down" && keyboard_check_pressed(ord("R"))) {
+    server_retry_count = 0;
+    retry_link();
+}
+
 // Knock until it answers or we run out of patience. Deliberately NOT
 // gated on server_spawn_tried: the server being slow to boot has nothing
 // to do with who started it.
@@ -244,7 +251,7 @@ if (overlay != "") {
 	
 	if (overlay == "ledger") {
         var _rows = array_length(ledger_view());
-        var _page = 14;
+        var _page = ledger_page_rows;
  
         if (keyboard_check_pressed(vk_down)) {
             ledger_scroll = min(ledger_scroll + 1, max(0, _rows - _page));

@@ -12,6 +12,8 @@ SPLASH_HOLD     = 0.7;
 SPLASH_FADE_OUT = 0.8;
 
 MUSIC_GAIN = 1.4;   // headroom on top of the slider. snd_bgm is mastered quiet.
+JESTER_GAIN = 1.2;      // snd_jester is mastered quiet, so lift it
+audience_of = -1;
 
 INTRO_SPEED_BASE = 32;
  
@@ -39,7 +41,7 @@ intro_page        = 0;     // which screenful is up
 intro_paged       = false; // pagination done? needs the title height first
 intro_page_max    = 0;     // furthest page reached, so revisits do not re-type
 
-
+ledger_page_rows = 8;
 help_page = 0;       // 0 = how to play, 1 = the quantum
 
 measuring_queue    = [];   // battles awaiting a "measurement" beat
@@ -123,7 +125,7 @@ LETTER_BODY =
 + "buying what its own ministers know. You can turn two of them against "
 + "each other without ever leaving your hall, or make peace between them "
 + "for reasons entirely your own. You can swear a promise that will not "
-+ "come due for a year and then live with whatever the year does to it. "
++ "come due for half a year and then live with whatever the year does to it. "
 + "Most of what you can do here I never tried. Some of it I tried once "
 + "and would rather not discuss.\n\n"
 + "Understand this much and the rest will teach itself: everything here "
@@ -137,7 +139,7 @@ LETTER_BODY =
 + "no instructions beyond this letter and I will not be reachable.\n\n"
 + "Try not to lose the place. I have grown rather fond of it.";
 
-LETTER_SIGN = "-- Aurel, King of Eigenstate, absent but not yet dead";
+LETTER_SIGN = "-- Aurel, King of Eigenstate";
 
  
  
@@ -402,6 +404,8 @@ HELP_PAGES = [
         ["E espy",       "send agents. refreshes what you know of a court"],
         ["L levy",       "raise " + string(LEVY_BATCH) + " men for "
                        + string(COST_PER_LEVY * LEVY_BATCH) + " gold. costs an action"],
+		["X poison",     "set two other kingdoms against each other"],
+        ["K broker",     "make peace between two other kingdoms"],
         ["", ""],
         ["--- IN THEIR COURT (V) ---", ""],
         ["ask about",    "what they know, if they like you enough to say"],
@@ -418,7 +422,6 @@ HELP_PAGES = [
         ["mood",         "how warlike they are. seething means they want war"],
         ["bond",         "how entangled you are. + allied, - hostile"],
         ["sway",         "bonds run one way. who can lean on whom"],
-        ["debt",         "what they owe you, and you them"],
         ["freedom",      "how much a kingdom is still its own. low = fewer acts"],
     ],
     [
@@ -431,7 +434,7 @@ HELP_PAGES = [
         ["H",            "this screen"],
 		["J", "the ledger - everything that has happened"],
         ["P",            "settings, at any time"],
-        ["F5",           "start a fresh run"],
+        ["F5",           "start a fresh run (on game over screen only)"],
     ],
 ];
  
@@ -716,10 +719,8 @@ TUTORIAL = [
           + "That is not a bug, it is what you have not looked at." },
     { focus: "detail",  title: "What you know",
       body: "The panel under the roster is the selected kingdom in full. "
-          + "bond is how entangled you are, sway is who can lean on whom, "
-          + "debt is unsettled favours.\n"
-          + "sway and debt run in a direction. Holding sway over someone is "
-          + "worth troops when it comes to a fight." },
+          + "bond is how entangled you are. Sway is who can lean on whom.\n"
+          + "Holding sway over someone is worth troops when it comes to a fight."},
     { focus: "council", title: "Acting",
       body: "The verbs at the bottom are your month. Press the letter, then "
           + "a number for who.\n"
@@ -2212,8 +2213,7 @@ JBIT_USHER  = 0.85;
 JBIT_ENTER  = 1.10;
 JBIT_BOOM   = 0.60;
 JBIT_RETURN = 0.90;
-JESTER_GAIN = 1.2;      // snd_jester is mastered quiet, so lift it
- 
+
 JESTER_SCALE = 2;       // 32x32 art at 2x inside the 320x180 illustration
 JESTER_FPS   = 4;
 JBIT_STOP_KEY = vk_space;
@@ -2274,7 +2274,7 @@ audience_do = function(_ch) {
 
     // an action that costs a point must be affordable
     if (_ch.points > 0 && plan_room() < _ch.points) {
-        audience_line = "\"You have nothing left to spend this month, ane both "
+        audience_line = "\"You have nothing left to spend this month, and both "
                       + "know it.\"";
         return;
     }

@@ -33,7 +33,12 @@ if (overlay == "ledger") {
     ui_reserve(_lp, _llh + 6);
  
     var _view = ledger_view();
-    var _page = 14;
+    
+	// DERIVED, not guessed. 14 never fitted, so Step's clamp (which used the
+    // same literal) stopped short and the oldest rows could not be reached.
+    // The filter line below costs one line plus 4, so take that off first.
+    var _page = max(1, floor((ui_room(_lp) - _llh - 4) / _llh));
+    ledger_page_rows = _page;      // Step reads this for its scroll clamp
  
     // which slice, and what of
     ui_font("label");
@@ -169,8 +174,11 @@ if (overlay == "observatory") {
     if (array_length(q_gates) == 0)
         ui_text(_gp.x, _gp.cursor, "no operations yet", ui_col("faint"), _gp.inner_w);
 
-    ui_text(12, 340, "Q or ESC to close     r is the Bloch vector length: "
-          + "how much a kingdom is still its own", ui_col("faint"), 616);
+    ui_font("label");
+    ui_text(12, 306, "r is the Bloch vector length: how much a kingdom is "
+          + "still its own", ui_col("faint"), 616);
+    ui_text(12, 324, "Q or ESC to close", ui_col("faint"), 616);
+    ui_font("body");
     exit;
 }
 
@@ -537,7 +545,9 @@ if (scene == "intro") {
         // guessed, so it cannot land on top of a long signature
         var _sgw = string_width(LETTER_SIGN);
         ui_font("body");
-        fx_seal(85 + _sgw + 24, _sgy + 10, 11);
+        // CLAMPED. Measured in the display font, a 50-character signature
+        // pushes this off the parchment and off the screen.
+        fx_seal(min(85 + _sgw + 24, 552), _sgy + 10, 11);
     }
 
     // --- prompts. ONE block, not two: this was drawn twice before. ---
@@ -1593,7 +1603,7 @@ if (tut_active) {
                  ? 1 : array_length(ui_wrap(_bparas[_bi], 588));
 
     // the card itself, bottom of the screen, over the council area
-    var CH = clamp(8 + _tith + _blines * _lh3 + 4 + _lh3 + 8, 116, 180);
+    var CH = clamp(8 + _tith + _blines * _lh3 + 4 + _lh3 + 8, 116, 240);
     var CY = 360 - CH - 6;
     draw_set_alpha(0.94);
     draw_set_colour(make_colour_rgb(10, 12, 17));
