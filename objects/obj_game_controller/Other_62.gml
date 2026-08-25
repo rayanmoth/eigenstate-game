@@ -17,7 +17,7 @@ var _st = async_load[? "http_status"];
 // ---------------- failure ----------------
 if (async_load[? "status"] != 0 || _st != 200) {
     add_log("The oracle is silent. (status "
-          + string(async_load[? "status"]) + ", http " + string(_st) + ")");
+          + string(async_load[? "status"]) + ", http " + string(_st) + ")", "ui");
     show_debug_message("raw: " + string(async_load[? "result"]));
 	
 	show_debug_message("status=" + string(async_load[? "status"])
@@ -266,7 +266,7 @@ if (last_request == "newgame") {
     if (_traits != undefined) {
         for (var j = 0; j < array_length(_traits); j++) make_leader(j, _traits[j]);
         factions[ME].leader = "you";
-        add_log("You take the throne of Eigenstate. Your neighbours have names now.");
+        add_log("You take the throne of Eigenstate. Your neighbours have names now.", "");
     }
 	
 	// THE WORLD IS VISIBLE FROM THE START. Gossip and espy still refresh
@@ -283,7 +283,7 @@ if (last_request == "newgame") {
 	link = "ok";
 	
 
-    add_log("Four rivals measured into being. Month 1 begins.");
+    add_log("Four rivals measured into being. Month 1 begins.", "");
     phase = "plan";
     exit;
 }
@@ -325,13 +325,13 @@ if (last_request == "turn") {
  
             if (_over == ME) {
                 add_log("You have no more of yourself to give. Your bond with "
-                      + factions[_oth].name + " thins.");
+                      + factions[_oth].name + " thins.", "bond");
             } else if (_oth == ME) {
                 add_log(factions[_over].name + " has spent itself elsewhere. "
-                      + "Its bond with you thins.");
+                      + "Its bond with you thins.", "bond");
             } else {
                 add_log(factions[_over].name + " has no room left. Its bond "
-                      + "with " + factions[_oth].name + " thins.");
+                      + "with " + factions[_oth].name + " thins.", "bond");
             }
         }
     }

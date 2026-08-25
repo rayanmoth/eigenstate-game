@@ -14,8 +14,75 @@
 // column will ever hold. Change the font size and the layout follows.
 // ============================================================
 
+// A scissor left set by any block below would clip the whole next frame to
+// black. Clearing it here means the worst case is one bad frame rather than
+// a dead screen.
+
 if (overlay == "settings") {
     settings_panel_draw("UP/DOWN choose   LEFT/RIGHT change   ESC or P to close");
+    exit;
+}
+
+
+if (overlay == "ledger") {
+    draw_set_colour(make_colour_rgb(8, 10, 14));
+    draw_rectangle(0, 0, 640, 360, false);
+ 
+    var _lp  = ui_panel(12, 12, 616, 336, "THE LEDGER");
+    var _llh = ui_line_h();
+    ui_reserve(_lp, _llh + 6);
+ 
+    var _view = ledger_view();
+    var _page = 14;
+ 
+    // which slice, and what of
+    ui_font("label");
+    ui_text(_lp.x, _lp.cursor,
+            string_upper(LEDGER_FILTERS[ledger_filter][0]),
+            ui_col("quantum"), 200);
+    ui_text_right(_lp.x + _lp.inner_w, _lp.cursor,
+            (array_length(_view) == 0)
+                ? "nothing yet"
+                : string(ledger_scroll + 1) + "-"
+                + string(min(array_length(_view), ledger_scroll + _page))
+                + " of " + string(array_length(_view)),
+            ui_col("faint"));
+    _lp.cursor += _llh + 4;
+    ui_font("body");
+ 
+    if (array_length(_view) == 0) {
+        ui_text(_lp.x, _lp.cursor, "Nothing under this heading yet.",
+                ui_col("dim"), _lp.inner_w);
+    }
+ 
+    for (var i = ledger_scroll;
+         i < min(array_length(_view), ledger_scroll + _page); i++) {
+        if (ui_room(_lp) < _llh) break;
+        var _e = _view[i];
+ 
+        // COLOUR BY KIND. This is the difference between a record you can
+        // scan and a wall of text: a war and a tax note should not look the
+        // same weight.
+        var _c = ui_col("text");
+        if (_e.k == "war")   _c = ui_col("war");
+        if (_e.k == "bond")  _c = ui_col("ally");
+        if (_e.k == "oath")  _c = ui_col("quantum");
+        if (_e.k == "gold")  _c = ui_col("faint");
+        if (_e.k == "intel") _c = ui_col("dim");
+ 
+        // the month, so it reads as a record rather than a stream
+        ui_font("label");
+        ui_text(_lp.x, _lp.cursor, "m" + string(_e.m), ui_col("faint"), 34);
+        ui_font("body");
+        ui_text(_lp.x + 38, _lp.cursor, _e.t, _c, _lp.inner_w - 38);
+        _lp.cursor += _llh;
+    }
+ 
+    ui_font("label");
+    ui_text(_lp.x, ui_footer_y(_lp),
+            "UP/DOWN scroll    LEFT/RIGHT what to show    J or ESC close",
+            ui_col("faint"), _lp.inner_w);
+    ui_font("body");
     exit;
 }
 
@@ -521,9 +588,6 @@ if (audience_of != -1) {
     // otherwise draw over the roster and the top bar. Anything outside these
     // bounds is discarded rather than drawn, so a ruler sliding out simply
     // disappears at the edge instead of gliding across the UI.
-    var _clip_prev = gpu_get_scissor();
-    gpu_set_scissor(_ax, _ay, _aw, _ah);
-	gpu_set_scissor(_clip_prev);
  
     var _hall_spr = portrait_sprite("hall", _f.hall);
     var _person_layers = [ ["build",  _f.build],
@@ -648,7 +712,6 @@ if (audience_of != -1) {
         }
         _any = true;
     }
-
 
     // ---------- who you are talking to ----------
     var _dp = ui_panel(344, 14, 284, 180, "");
@@ -795,20 +858,6 @@ if (game_over) {
               ui_col("dim"), _lh);
  
     // ---- the collection ----
-    _gp.cursor += 6;
-    if (ui_room(_gp) >= _lh * 2) {
-        ui_font("label");
-        ui_text(_gp.x, _gp.cursor, "ENDINGS FOUND   "
-              + string(array_length(endings_seen)) + " of "
-              + string(array_length(ENDING_KEYS)), ui_col("quantum"),
-              _gp.inner_w);
-        _gp.cursor += _lh;
-        var _es = "";
-        for (var e = 0; e < array_length(endings_seen); e++)
-            _es += (e > 0 ? "   " : "") + endings_seen[e];
-        ui_text(_gp.x, _gp.cursor, _es, ui_col("dim"), _gp.inner_w);
-        ui_font("body");
-    }
  
     ui_text(_gp.x, ui_footer_y(_gp), "F5 to run again.",
             ui_col("faint"), _gp.inner_w);
@@ -1304,7 +1353,7 @@ if (phase == "resolving") {
     // FOOTER. H and Q were nowhere on screen, which made the only two
     // explanatory screens in the game undiscoverable.
     ui_text(_np.x, _np.bottom - LH,
-        "1-4 choose   V court   ENTER end month   H help   Q observatory   P settings",
+        "1-4 choose   V court   ENTER end month   H help   Q observatory   J ledger   P settings",
         ui_col("faint"), _np.inner_w);
 }
 

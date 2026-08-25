@@ -50,7 +50,7 @@ if (keyboard_check_pressed(vk_f2)) {
         _df.crown  = TIER_NAMES[_df.tier] + "_" + GENDER_NAMES[_df.gender];
         _df.hall   = _df.tier;
     }
-    add_log("debug: tier " + TIER_NAMES[factions[0].tier]);
+    //add_log("debug: tier " + TIER_NAMES[factions[0].tier], "ui");
 }
 
 
@@ -188,6 +188,13 @@ if (keyboard_check_pressed(ord("P"))) {
     if (overlay == "settings") { overlay = ""; settings_save(); }
     else { overlay = "settings"; set_pick = 0; }
 }
+
+if (keyboard_check_pressed(ord("J"))) {
+    if (overlay == "ledger") overlay = "";
+    else { overlay = "ledger"; ledger_scroll = 0; }
+    sfx("snd_page");
+}
+
 if (overlay != "") {
 	
 	// settings owns the arrow keys while it is open, so it has to come
@@ -199,12 +206,39 @@ if (overlay != "") {
 	
 	if (overlay == "help") {
         var _hlast = array_length(HELP_PAGES) + array_length(QUANTUM_PAGES) - 1;
-        if (keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_space))
+        if (keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_space)) {
             help_page = min(help_page + 1, _hlast);
-			sfx("snd_ui_move");
-        if (keyboard_check_pressed(vk_left))
+            sfx("snd_ui_move");
+        }
+        if (keyboard_check_pressed(vk_left)) {
             help_page = max(help_page - 1, 0);
-			sfx("snd_ui_move");
+            sfx("snd_ui_move");
+        }
+    }
+	
+	if (overlay == "ledger") {
+        var _rows = array_length(ledger_view());
+        var _page = 14;
+ 
+        if (keyboard_check_pressed(vk_down)) {
+            ledger_scroll = min(ledger_scroll + 1, max(0, _rows - _page));
+        }
+        if (keyboard_check_pressed(vk_up)) {
+            ledger_scroll = max(ledger_scroll - 1, 0);
+        }
+        // LEFT/RIGHT changes what you are looking at, which is the thing
+        // that turns a wall of text into an answer to a question
+        if (keyboard_check_pressed(vk_right)) {
+            ledger_filter = (ledger_filter + 1) mod array_length(LEDGER_FILTERS);
+            ledger_scroll = 0;
+            sfx("snd_page");
+        }
+        if (keyboard_check_pressed(vk_left)) {
+            ledger_filter = (ledger_filter - 1 + array_length(LEDGER_FILTERS))
+                            mod array_length(LEDGER_FILTERS);
+            ledger_scroll = 0;
+            sfx("snd_page");
+        }
     }
 	
     if (keyboard_check_pressed(vk_escape)) overlay = "";
@@ -339,7 +373,7 @@ if (phase == "events") {
             actions_left = (factions[ME].independence >= INDEP_ACTION_FLOOR)
                          ? ACTIONS_MAX : 1;
             if (actions_left < ACTIONS_MAX)
-                add_log("Your court is too entangled to act freely. One action.");
+                add_log("Your court is too entangled to act freely. One action.", "bond");
 
             if (year > MONTHS_TOTAL) compute_ending();
             exit;
@@ -351,8 +385,14 @@ if (phase == "events") {
 
     var _nc = array_length(event_current.choices);
     if (_nc > 0) {
-        if (keyboard_check_pressed(vk_down)) event_pick = (event_pick + 1) mod _nc;
-        if (keyboard_check_pressed(vk_up))   event_pick = (event_pick - 1 + _nc) mod _nc;
+        if (keyboard_check_pressed(vk_down)) {
+            event_pick = (event_pick + 1) mod _nc;
+            sfx("snd_ui_move");
+        }
+        if (keyboard_check_pressed(vk_up)) {
+            event_pick = (event_pick - 1 + _nc) mod _nc;
+            sfx("snd_ui_move");
+        }
         if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
             // Choices are DATA (an act string plus a target), resolved by
             // apply_choice. GML function literals capturing loop variables
@@ -364,9 +404,10 @@ if (phase == "events") {
             event_current = undefined;
         }
     } else {
-        if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space))
+        if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)){
             event_current = undefined;
 			sfx("snd_ui_move");
+		}
     }
     exit;
 }
@@ -384,7 +425,8 @@ if (phase == "measuring") {
             measuring_hold += _dt;
             if (measuring_hold >= MEASURE_HOLD_REQ) {
                 measuring_revealed = true;
-                sfx("snd_boom");
+                sfx("snd_boom");     // the collapse
+            }
         } else {
             measuring_hold = 0;
         }
@@ -523,7 +565,7 @@ for (var k = 1; k < N; k++) {
     if (pending_verb == "") { selected = k; sfx("snd_ui_move"); break; }
 
     if (!is_active(k) && pending_verb != "espy") {
-        add_log(factions[k].name + " is in no position to answer.");
+        add_log(factions[k].name + " is in no position to answer.", "ui");
         pending_verb = ""; pending_first = -1;
         break;
     }
@@ -531,7 +573,7 @@ for (var k = 1; k < N; k++) {
     // an oath opens the builder instead of resolving straight away
     if (pending_verb == "oath") {
         if (oath_exists(ME, k)) {
-            add_log("There is already an oath open with " + factions[k].name + ".");
+            add_log("There is already an oath open with " + factions[k].name + ".", "ui");
             pending_verb = "";
             break;
         }
@@ -549,7 +591,7 @@ for (var k = 1; k < N; k++) {
             pending_first = k;
             add_log(pending_verb == "poison"
                 ? "Poison: set " + factions[k].name + " against...?"
-                : "Broker: " + factions[k].name + " and...?");
+                : "Broker: " + factions[k].name + " and...?", "ui");
             break;
         }
         if (pending_first == k) break;
@@ -582,7 +624,7 @@ if (plan_room() > 0) {
  
     if (keyboard_check_pressed(ord("F"))) {
         if (array_length(board) == 0) {
-            add_log("Nothing is being sworn anywhere. There is nothing to lean on.");
+            add_log("Nothing is being sworn anywhere. There is nothing to lean on.", "ui");
             sfx("snd_ui_move");
         } else {
             lean_mode  = true;
@@ -596,7 +638,7 @@ if (plan_room() > 0) {
 
 if (keyboard_check_pressed(ord("L"))) {
     if (factions[ME].treasury < COST_PER_LEVY)
-        add_log("There is no gold to raise more men.");
+        add_log("There is no gold to raise more men.", "ui");
     else
         plan_add("levy", ME, -1, 1);      // costs gold, not resolve
     pending_verb = ""; pending_first = -1;

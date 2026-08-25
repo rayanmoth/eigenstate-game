@@ -84,7 +84,7 @@ retry_link = function() {
     link_note = "";
     starting = true;
     post("/newgame", {}, "newgame");
-    if (server_retry_count <= 1) add_log("Reaching for the oracle again...");
+    if (server_retry_count <= 1) add_log("Reaching for the oracle again...", "ui");
 }
  
 LETTER_TITLE = "To the Regent of Eigenstate";
@@ -95,7 +95,7 @@ LETTER_BODY =
 + "Four kingdoms border us: Coherre, Decohra, Phasemark, Nullhold. None "
 + "are friends and none are fixed enemies. Push one too hard and it turns "
 + "on you. Tie yourself too closely to one and you lose the ability to "
-+ "act against it later -- that is not advice, it is how this world "
++ "act against it later - that is not advice, it is how this world "
 + "works. Every court's mood and every bond between courts can shift, "
 + "and every shift has a cost.\n\n"
 + "You have two years. Each month you choose: attack, make peace, build "
@@ -162,6 +162,21 @@ awaiting     = false;
 starting     = true;
 request_id   = -1;
  
+
+ledger      = [];      // every line, for the whole run
+ledger_open = false;
+ledger_scroll = 0;     // top visible row
+ledger_filter = 0;     // index into LEDGER_FILTERS
+ 
+LEDGER_FILTERS = [
+    ["everything", ""],
+    ["wars",       "war"],
+    ["bonds",      "bond"],
+    ["oaths",      "oath"],
+    ["your realm", "gold"],
+    ["intel",      "intel"],
+];
+
 log_lines = [];
 LOG_MAX   = 8;
 
@@ -224,7 +239,7 @@ server_spawn = function() {
     server_spawn_tried = true;                 // 5055 is the worst outcome
  
     var _dir = server_dir();
-    add_log("Waking the oracle...");
+    add_log("Waking the oracle...", "ui");
  
     if (os_type == os_macosx || os_type == os_linux) {
         execute_shell("/bin/bash", "\"" + _dir + "/start_server.sh\" --nowait");
@@ -232,7 +247,7 @@ server_spawn = function() {
         // cmd needs the whole thing wrapped again when the path has spaces
         execute_shell("cmd", "/c \"\"" + _dir + "/start_server.bat\"\"");
     } else {
-        add_log("Cannot start the oracle on this platform. Start it by hand.");
+        add_log("Cannot start the oracle on this platform. Start it by hand.", "ui");
         return false;
     }
     return true;
@@ -379,6 +394,7 @@ HELP_PAGES = [
         ["BACKSPACE",    "undo the last thing you queued"],
         ["Q",            "the Observatory -- the real quantum state"],
         ["H",            "this screen"],
+		["J", "the ledger - everything that has happened"],
         ["P",            "settings, at any time"],
         ["F5",           "start a fresh run"],
     ],
@@ -413,30 +429,36 @@ settings_apply = function() {
 ///       out, and the CALLER decides what out means -- the title menu goes
 ///       back to root, the in-game overlay closes. Shared so the two can
 ///       never drift apart.
+
 settings_input = function() {
     var _n = array_length(SETTING_ROWS);
-    if (keyboard_check_pressed(vk_down)) { set_pick = (set_pick + 1) mod _n; sfx("snd_ui_move"); }
+    if (keyboard_check_pressed(vk_down)) { set_pick = (set_pick + 1) mod _n;     sfx("snd_ui_move"); }
     if (keyboard_check_pressed(vk_up))   { set_pick = (set_pick - 1 + _n) mod _n; sfx("snd_ui_move"); }
  
     var _step = 0;
     if (keyboard_check_pressed(vk_right)) _step =  1;
     if (keyboard_check_pressed(vk_left))  _step = -1;
-    // held arrows nudge sliders, because 0.02 at a time by tapping is a
-    // bad way to spend someone's attention
+    // held arrows nudge sliders, because 0.02 at a time by tapping is a bad
+    // way to spend someone's attention
     if (_step == 0) {
         if (keyboard_check(vk_right)) _step =  1;
         if (keyboard_check(vk_left))  _step = -1;
     }
  
+    // ROWS BY NAME, not index. The browser build drops the fullscreen row, so
+    // every index below it shifts and an index-based version would put the
+    // music slider on the tutorial toggle.
     var _kind = SETTING_ROWS[set_pick][1];
-    var _row = SETTING_ROWS[set_pick][0];
+    var _row  = SETTING_ROWS[set_pick][0];
  
     if (_kind == "toggle") {
         if (keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_left)
          || keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
             if (_row == "fullscreen")     opt_fullscreen = !opt_fullscreen;
             if (_row == "offer tutorial") opt_tutorial   = !opt_tutorial;
-            settings_apply(); settings_save(); sfx("snd_ui_confirm");
+            settings_apply();
+            settings_save();
+            sfx("snd_ui_confirm");
         }
     } else if (_step != 0) {
         var _d = _step * 0.02;
@@ -444,27 +466,42 @@ settings_input = function() {
         if (_row == "sound")      opt_sfx       = clamp(opt_sfx + _d, 0, 1);
         if (_row == "text speed") opt_textspeed = clamp(opt_textspeed + _d * 2, 0.25, 3);
         settings_apply();
+        // save on release rather than every frame
         if (keyboard_check_released(vk_right) || keyboard_check_released(vk_left))
             settings_save();
         if (_row == "sound" && keyboard_check_pressed(vk_right)) sfx("snd_ui_move");
     }
+ 
+    // THE RETURN IS THE POINT OF THIS FUNCTION'S CONTRACT. It reports "the
+    // player wants out" and the CALLER decides what out means -- the title
+    // menu goes back to root, the in-game overlay closes. Without it both
+    // callers see undefined and nothing ever closes.
+    return keyboard_check_pressed(vk_escape);
 }
-	
-	
-/// @desc The settings panel. Takes its own footer so the title screen and
-///       the in-game overlay can advertise different close keys.
+
+
 settings_panel_draw = function(_footer) {
-    var _sp = ui_panel(140, 60, 360, 240, "SETTINGS");
+    var _sp  = ui_panel(140, 60, 360, 240, "SETTINGS");
     var _slh = ui_line_h();
-    ui_reserve(_sp, _slh + 4);
+ 
+    // the browser build prints a second footer line about fullscreen, so it
+    // needs twice the reserved room or that line lands outside the panel
+    var _foot_lines = (os_type == os_browser) ? 2 : 1;
+    ui_reserve(_sp, _slh * _foot_lines + 4);
+ 
     var _lblw = string_width("offer tutorial") + 16;
  
-    var _sel = (i == set_pick);
+    for (var i = 0; i < array_length(SETTING_ROWS); i++) {
+        var _sel = (i == set_pick);
         var _row = SETTING_ROWS[i][0];
         var _col = _sel ? ui_col("you") : ui_col("dim");
         ui_text(_sp.x, _sp.cursor, (_sel ? "> " : "  ") + _row, _col, _lblw);
  
         var _vx = _sp.x + _lblw;
+ 
+        // ROWS ARE ADDRESSED BY NAME, not index. The browser build drops the
+        // fullscreen row, so every index below it shifts and an index-based
+        // version would put the music slider on the tutorial toggle.
         if (SETTING_ROWS[i][1] == "toggle") {
             var _on = (_row == "fullscreen") ? opt_fullscreen : opt_tutorial;
             ui_text(_vx, _sp.cursor, _on ? "on" : "off",
@@ -478,19 +515,18 @@ settings_panel_draw = function(_footer) {
             if (_row == "text speed") _shown = string_format(opt_textspeed, 1, 2) + "x";
             ui_text(_vx + 130, _sp.cursor, _shown, ui_col("faint"));
         }
-        _sp.cursor += _slh + 4;
  
+        _sp.cursor += _slh + 4;
+    }
+ 
+    var _fy = ui_footer_y(_sp);
     if (os_type == os_browser) {
-        ui_text(_sp.x, ui_footer_y(_sp),
-                "double-click the game for fullscreen", ui_col("faint"),
-                _sp.inner_w);
-        ui_text(_sp.x, ui_footer_y(_sp) - ui_line_h(), _footer,
+        ui_text(_sp.x, _fy - _slh, _footer, ui_col("faint"), _sp.inner_w);
+        ui_text(_sp.x, _fy, "double-click the game for fullscreen",
                 ui_col("faint"), _sp.inner_w);
     } else {
-        ui_text(_sp.x, ui_footer_y(_sp), _footer, ui_col("faint"), _sp.inner_w);
+        ui_text(_sp.x, _fy, _footer, ui_col("faint"), _sp.inner_w);
     }
-    // (that needs ui_reserve(_sp, _slh * 2 + 4) at the top of the function
-    //  instead of _slh + 4, or the second line lands outside the panel)
 }
  
 // ---------- audio, defensively ----------
@@ -591,14 +627,29 @@ QUANTUM_PAGES = [
              + "between."
     },
     {
-        title: "And some of it runs on real hardware",
-        body:  "The world is simulated locally so the game stays fast. But "
-             + "an oath coming due can be sent to Moth Quantum's platform, "
-             + "which prepares this exact five-kingdom state and measures "
-             + "it, on a simulator or on an IBM quantum computer.\n"
+        title: "Where this actually runs",
+        body:  "The five kingdoms are a real five-qubit entangled state, "
+             + "with real tomography and real non-commuting rotations. "
+             + "Where that state is COMPUTED depends on how the game is "
+             + "set up.\n"
              + "\n"
-             + "When that happens the game says so, and records the job. "
-             + "Press Q in play to see the machinery."
+             + "Battles are always local: a battle is composed rotations "
+             + "where the order is the mechanic, and the engine takes state "
+             + "targets rather than gates, so there would be nothing honest "
+             + "to send it.\n"
+             + "\n"
+             + "Everything else -- every mood, bond, leverage and debt "
+             + "figure on screen, and every oath coming due -- can be "
+             + "measured on Moth Quantum's engine instead, which prepares "
+             + "this exact five-kingdom state and reads it back.\n"
+             + "\n"
+             + "Press Q in play. The chronicle there names where each "
+             + "measurement happened, every time, and says emulator when it "
+             + "was an emulator."
+			 
+			 // Deliberately says "can be" rather than "is". The scope is an environment
+			 // variable and this text has to stay true whichever way it is set -- which
+			 // is exactly the mistake the old version made.
     },
 ];
 q_page = 0;
@@ -690,7 +741,7 @@ tut_begin = function() {
 tut_end = function(_silent) {
     tut_active = false;
     tut_prompt = false;
-    if (!_silent) add_log("Tutorial closed. Press H for help at any time.");
+    if (!_silent) add_log("Tutorial closed. Press H for help at any time.", "ui");
 }
  
 // bgm / throne_bgm are declared near the top now, above settings_load(),
@@ -851,9 +902,42 @@ leverage_word = function(_l) {
     return "even footing";
 }
 
-add_log = function(_t) {
+
+/// @desc One line in the chronicle, and one entry in the permanent ledger.
+///
+/// _kind is optional and only affects colour and filtering. Every existing
+/// call site keeps working untouched.
+///
+///   "war"    a host marched
+///   "bond"   a relationship moved
+///   "oath"   something was sworn, sealed or broken
+///   "gold"   economy, levies, unrest
+///   "intel"  scouting, gossip, what you learned
+///   ""       everything else
+add_log = function(_t, _kind = "") {
     array_push(log_lines, _t);
     while (array_length(log_lines) > LOG_MAX) array_delete(log_lines, 0, 1);
+
+    // "ui" is feedback, not history. A refusal or a prompt answers the key
+    // you just pressed and then stops mattering; archiving it is what makes
+    // a ledger read as noise.
+    if (_kind == "ui") return;
+
+    array_push(ledger, { m: year, k: _kind, t: _t });
+}
+
+
+/// @desc The ledger, newest first, filtered. Built fresh each frame because
+///       200 entries is nothing and a cached copy is one more thing to
+///       invalidate.
+ledger_view = function() {
+    var _want = LEDGER_FILTERS[ledger_filter][1];
+    var _out = [];
+    for (var i = array_length(ledger) - 1; i >= 0; i--) {
+        var _e = ledger[i];
+        if (_want == "" || _e.k == _want) array_push(_out, _e);
+    }
+    return _out;
 }
  
 mood_word = function(_h) {
@@ -1006,7 +1090,7 @@ make_vassal = function(_i, _lord) {
     // A sworn kingdom is CORRELATED with its lord, not merely labelled one.
     // This is the line that makes vassalage cost something: see below.
     queue_bond(_i, _lord, +0.85);
-    add_log(factions[_i].name + " bends the knee to " + factions[_lord].name + ".");
+    add_log(factions[_i].name + " bends the knee to " + factions[_lord].name + ".", "war");
     if (_lord == ME) {
         push_event("collapse", factions[_i].name + " bends the knee",
             factions[_i].leader + " kneels in your hall. Their land is yours to hold "
@@ -1056,8 +1140,8 @@ coalition_step = function() {
         for (var j = i + 1; j < array_length(_others); j++)
             queue_bond(_others[i], _others[j], 0.14);
  
-    if (_lead == ME) add_log("The others are speaking of you behind closed doors.");
-    else add_log("A coalition forms against " + factions[_lead].name + ".");
+    if (_lead == ME) add_log("The others are speaking of you behind closed doors.", "intel");
+    else add_log("A coalition forms against " + factions[_lead].name + ".", "bond");
 }
 
 
@@ -1067,12 +1151,12 @@ rival_aid = function(_i, _t) {
     factions[_i].treasury -= COST_AID;
     factions[_t].unrest = max(0, factions[_t].unrest - 8);
     queue("aided", _i, _t);
-    add_log(factions[_i].name + " sends grain to " + factions[_t].name + ".");
+    add_log(factions[_i].name + " sends grain to " + factions[_t].name + ".", "bond");
 }
  
 rival_bind = function(_i, _t) {
     queue("bound", _i, _t);
-    add_log(factions[_i].name + " and " + factions[_t].name + " swear a pact.");
+    add_log(factions[_i].name + " and " + factions[_t].name + " swear a pact.", "bond");
 }
  
 rival_poison = function(_i, _a, _b) {
@@ -1080,7 +1164,7 @@ rival_poison = function(_i, _a, _b) {
     queue_mood(_a, 0.20);
     queue_mood(_b, 0.20);
     add_log(factions[_i].name + " sets " + factions[_a].name
-          + " against " + factions[_b].name + ".");
+          + " against " + factions[_b].name + ".", "bond");
 }
  
 // Does faction _i share an enemy with faction _t? Shared enemies are the
@@ -1346,7 +1430,7 @@ for (var i = 0; i < N; i++) {
                         _lord.holds = max(1, _lord.holds - 1);
                         queue_mood(i, 0.5);
                         queue_bond(i, _lord.id, -0.5);
-                        add_log(_f.name + " throws off " + _lord.name + "'s yoke!");
+                        add_log(_f.name + " throws off " + _lord.name + "'s yoke!", "war");
                         if (_lord.id == ME) {
                             push_event("rebellion", _f.name + " rises",
                                 "Your unrest has been read as weakness. " + _f.leader
@@ -1357,7 +1441,7 @@ for (var i = 0; i < N; i++) {
                     }
                 } else {
                     _f.vassal_of = -1; _f.holds = 1; _f.army = 4;
-                    add_log(_f.name + " is masterless once more.");
+                    add_log(_f.name + " is masterless once more.", "war");
                 }
                 continue;
             }
@@ -1370,7 +1454,7 @@ for (var i = 0; i < N; i++) {
                 _f.unrest += UNREST_UNPAID;
                 unrest_note(i, "unpaid levies", UNREST_UNPAID);
                 _f.army = floor(_f.army * 0.85);
-                if (i == ME) add_log("You cannot pay the levies. Some desert.");
+                if (i == ME) add_log("You cannot pay the levies. Some desert.", "gold");
             }
  
             // (2) occupied land never settles
@@ -1419,7 +1503,7 @@ for (var i = 0; i < N; i++) {
                 _f.army = floor(_f.army * 0.5);
                 _f.unrest = CIVIL_WAR_UNREST;
                 _f.holds--;
-                add_log(_f.name + " tears itself apart in civil war.");
+                add_log(_f.name + " tears itself apart in civil war.", "war");
                 if (i == ME) {
                     push_event("collapse", "Eigenstate turns on itself",
                         "The cost of your reign has come due. A holding is lost to "
@@ -1483,7 +1567,7 @@ plan_room = function() {
 
 plan_add = function(_verb, _a, _b, _cost = 1) {
     if (_cost > 0 && plan_room() < _cost) {
-        add_log("No more resolve this month.");
+        add_log("No more resolve this month.", "ui");
         sfx("snd_ui_move");          // a refusal still makes a noise
         return false;
     }
@@ -1497,7 +1581,7 @@ plan_undo = function() {
     var _p = plan[array_length(plan) - 1];
     array_pop(plan);
     sfx("snd_ui_move");
-    add_log("You reconsider: " + _p.verb + " withdrawn.");
+    add_log("You reconsider: " + _p.verb + " withdrawn.", "ui");
 }
 
 plan_label = function(_p) {
@@ -1964,14 +2048,14 @@ audience_open = function(_i) {
 	sfx("snd_ui_confirm");
     if (_i == ME) return;
 	if (!variable_struct_exists(factions[_i], "head")) {
-		add_log("That court has not been measured into being yet.");
+		add_log("That court has not been measured into being yet.", "ui");
 		return;
 	}
-    if (!factions[_i].alive) { add_log("There is no court left to visit."); return; }
+    if (!factions[_i].alive) { add_log("There is no court left to visit.", "ui"); return; }
     if (factions[_i].vassal_of == ME) {
         // your own vassal cannot refuse you
     } else if (standing[ME][_i] == "WAR") {
-        add_log(factions[_i].name + " will not receive you. There is a war on.");
+        add_log(factions[_i].name + " will not receive you. There is a war on.", "war");
         return;
     }
     audience_of = _i;
@@ -2176,12 +2260,12 @@ audience_do = function(_ch) {
                 if (_t != ME) {
                     gossip_learn(_i, _t, bonds[_i][_t]);
                     add_log(_f.leader + " on " + factions[_t].name + ": "
-                          + bond_word(bonds[_i][_t]));
+                          + bond_word(bonds[_i][_t]), "intel");
                 }
             } else if (_cand == "civil") {
-                add_log(_f.leader + " was polite and told you nothing firm.");
+                add_log(_f.leader + " was polite and told you nothing firm.", "intel");
             } else {
-                add_log(_f.leader + " told you nothing you can use.");
+                add_log(_f.leader + " told you nothing you can use.", "intel");
             }
  
             // stay on the page: work the whole court in one visit
@@ -2205,7 +2289,7 @@ audience_do = function(_ch) {
                 queue_mood(_i, 0.25);
                 queue_bond(ME, _i, -0.30);
                 audience_line = "\"Tribute. From us. Get out of my hall.\"";
-                add_log(_f.name + " refuses tribute, and remembers being asked.");
+                add_log(_f.name + " refuses tribute, and remembers being asked.", "bond");
             } else {
                 _me.treasury += 45;
                 _f.treasury = max(0, _f.treasury - 45);
@@ -2216,7 +2300,7 @@ audience_do = function(_ch) {
                 // just goes back to what it was. Spend the point directly.
                 actions_left -= _ch.points;
                 audience_line = "\"Take it. Take it and go.\"";
-                add_log("You extract 45 gold from " + _f.name + ".");
+                add_log("You extract 45 gold from " + _f.name + ".", "gold");
             }
         break;
 
@@ -2235,11 +2319,11 @@ audience_do = function(_ch) {
             if (power_of(ME) > power_of(_i) * 1.4) {
                 _f.unrest += 8;
                 audience_line = "\"...I hear you.\"";
-                add_log(_f.name + " is cowed, and resentful.");
+                add_log(_f.name + " is cowed, and resentful.", "bond");
             } else {
                 queue_mood(_i, 0.20);
                 audience_line = "\"You are not strong enough to say that here.\"";
-                add_log(_f.name + " is not impressed. It will cost you.");
+                add_log(_f.name + " is not impressed. It will cost you.", "bond");
             }
         break;
 		
@@ -2284,7 +2368,7 @@ apply_choice = function(_ch) {
             queue_mood(ME, 0.25);
             _me.unrest = max(0, _me.unrest - 6);   // the court likes resolve
             add_log("You swear it before the court. " + factions[_ch.target].name
-                  + " will answer for this.");
+                  + " will answer for this.", "oath");
         break;
 
         case "pay_off":
@@ -2293,22 +2377,22 @@ apply_choice = function(_ch) {
                 queue_bond(ME, _ch.target, +0.35);
                 queue_mood(_ch.target, -0.30);
                 add_log("Gold changes hands. " + factions[_ch.target].name
-                      + " withdraws, for now.");
+                      + " withdraws, for now.", "gold");
             } else {
                 _me.unrest += 8;
-                add_log("You promise gold you do not have. Word gets out.");
+                add_log("You promise gold you do not have. Word gets out.", "gold");
             }
         break;
 
         case "nothing":
             _me.unrest += 6;
-            add_log("You say nothing. The silence is noted, and not kindly.");
+            add_log("You say nothing. The silence is noted, and not kindly.", "bond");
         break;
 
         case "stand_firm":
             queue_mood(ME, 0.20);
             _me.unrest = max(0, _me.unrest - 8);
-            add_log("You refuse to be spoken about. The court stiffens.");
+            add_log("You refuse to be spoken about. The court stiffens.", "bond");
         break;
 
         case "appease":
@@ -2316,16 +2400,16 @@ apply_choice = function(_ch) {
                 _me.treasury -= _ch.cost;
                 for (var j = 1; j < N; j++)
                     if (is_active(j)) queue_bond(ME, j, +0.18);
-                add_log("You buy goodwill by the cartload. It works, and it costs you.");
+                add_log("You buy goodwill by the cartload. It works, and it costs you.", "gold");
             } else {
-                add_log("There is not enough in the treasury to buy silence.");
+                add_log("There is not enough in the treasury to buy silence.", "gold");
             }
         break;
 
         case "crush":
             _me.army = max(0, _me.army - 4);
             factions[_ch.target].unrest += 20;
-            add_log("You put the rising down. It is remembered.");
+            add_log("You put the rising down. It is remembered.", "war");
         break;
 
         case "let_go":
@@ -2333,7 +2417,7 @@ apply_choice = function(_ch) {
             factions[_ch.target].holds = 1;
             factions[_ch.target].army = 3;
             _me.unrest = max(0, _me.unrest - 10);
-            add_log(factions[_ch.target].name + " goes free. Your court exhales.");
+            add_log(factions[_ch.target].name + " goes free. Your court exhales.", "bond");
         break;
     }
 }
@@ -2577,19 +2661,19 @@ apply_resolution = function(_answers) {
                 if (factions[ME].treasury >= COST_ATTACK && _found != undefined) {
                     factions[ME].treasury -= COST_ATTACK;
                     apply_battle(ME, _p.a, _found.outcome);
-                } else add_log("The march could not be paid for.");
+                } else add_log("The march could not be paid for.", "war");
             break;
             case "aid":
                 if (factions[ME].treasury >= COST_AID) {
                     factions[ME].treasury -= COST_AID;
                     queue("aided", ME, _p.a);
                     factions[_p.a].unrest = max(0, factions[_p.a].unrest - 8);
-                    add_log("You send aid to " + factions[_p.a].name + ".");
+                    add_log("You send aid to " + factions[_p.a].name + ".", "bond");
                 }
             break;
             case "bind":
                 queue("bound", ME, _p.a);
-                add_log("You bind Eigenstate to " + factions[_p.a].name + ".");
+                add_log("You bind Eigenstate to " + factions[_p.a].name + ".", "bond");
             break;
 
             // ---- v8: an oath is NOT resolved here. It is opened, and the
@@ -2602,7 +2686,7 @@ apply_resolution = function(_answers) {
                 });
                 add_log("You swear a " + oath_kind_of(_p.kind).label + " with "
                       + factions[_p.a].name + ". It will be tested in "
-                      + string(_p.span) + " months.");
+                      + string(_p.span) + " months.", "oath");
             break;
 
             case "lean":
@@ -2610,20 +2694,20 @@ apply_resolution = function(_answers) {
                     uid: _p.uid, by: ME, axis: _p.axis,
                     amount: _p.amount, on: _p.on
                 });
-                if (_p.amount < 0) add_log("You set to work undoing the " + _p.shown + ".");
-                else               add_log("You put your weight behind the " + _p.shown + ".");
+                if (_p.amount < 0) add_log("You set to work undoing the " + _p.shown + ".", "oath");
+                else               add_log("You put your weight behind the " + _p.shown + ".", "oath");
             break;
 
             case "poison":
                 queue_bond(_p.a, _p.b, -0.45);
                 queue_mood(_p.a, 0.25); queue_mood(_p.b, 0.25);
                 add_log("You whisper, and " + factions[_p.a].name
-                      + " begins to look sideways at " + factions[_p.b].name + ".");
+                      + " begins to look sideways at " + factions[_p.b].name + ".", "bond");
             break;
             case "broker":
                 queue("brokered", _p.a, _p.b);
                 add_log("You broker peace between " + factions[_p.a].name
-                      + " and " + factions[_p.b].name + ".");
+                      + " and " + factions[_p.b].name + ".", "bond");
             break;
             case "espy":
                 array_push(pending_scouts, _p.a);
@@ -2633,7 +2717,7 @@ apply_resolution = function(_answers) {
                 if (factions[ME].treasury >= _c) {
                     factions[ME].treasury -= _c;
                     factions[ME].army += LEVY_BATCH;
-                    add_log("You raise " + string(LEVY_BATCH) + " levies.");
+                    add_log("You raise " + string(LEVY_BATCH) + " levies.", "gold");
                 }
             break;
         }
@@ -2705,7 +2789,7 @@ finish_year = function() {
     year_economy();
  
     var _ul = unrest_line();
-    if (_ul != "") add_log(_ul);
+    if (_ul != "") add_log(_ul, "gold");
  
     if (game_over) return;
 
@@ -2884,9 +2968,9 @@ oath_threatens = function(_i, _o) {
 // ---- the player's two new plan verbs ----
 
 plan_add_oath = function(_t) {
-    if (plan_room() < 1) { add_log("No more resolve this month."); return false; }
+    if (plan_room() < 1) { add_log("No more resolve this month.", "ui"); return false; }
     if (oath_exists(ME, _t)) {
-        add_log("There is already an oath open with " + factions[_t].name + ".");
+        add_log("There is already an oath open with " + factions[_t].name + ".", "ui");
         return false;
     }
     array_push(plan, {
@@ -2902,7 +2986,7 @@ plan_add_oath = function(_t) {
 }
 
 plan_add_lean = function(_o, _dir, _axis_key, _side) {
-    if (plan_room() < 1) { add_log("No more resolve this month."); return false; }
+    if (plan_room() < 1) { add_log("No more resolve this month.", "ui"); return false; }
     var _on = _o.b;
     if (_side == 0) _on = _o.a;
     array_push(plan, {
@@ -2923,12 +3007,12 @@ rival_oath = function(_i, _t, _kind, _axis, _strength, _span) {
     });
     if (_kind == "siege") {
         add_log(factions[_i].name + " begins a siege of " + factions[_t].name
-              + ". It will be decided in " + string(_span) + " months.");
+              + ". It will be decided in " + string(_span) + " months.", "oath");
     } else if (_kind == "embargo") {
-        add_log(factions[_i].name + " closes its roads to " + factions[_t].name + ".");
+        add_log(factions[_i].name + " closes its roads to " + factions[_t].name + ".", "oath");
     } else {
         add_log(factions[_i].name + " opens talks with " + factions[_t].name
-              + ". Something is being drafted.");
+              + ". Something is being drafted.", "oath");
     }
 }
 
@@ -2956,11 +3040,11 @@ rival_lean = function(_i, _o) {
     if (_dir < 0) {
         add_log(factions[_i].name + " works against the "
               + oath_kind_of(_o.kind).label + " between "
-              + factions[_o.a].name + " and " + factions[_o.b].name + ".");
+              + factions[_o.a].name + " and " + factions[_o.b].name + ".", "oath");
     } else {
         add_log(factions[_i].name + " quietly backs the "
               + oath_kind_of(_o.kind).label + " between "
-              + factions[_o.a].name + " and " + factions[_o.b].name + ".");
+              + factions[_o.a].name + " and " + factions[_o.b].name + ".", "oath");
     }
 	
 	if (oath_involves_me(_o)) {
@@ -3222,7 +3306,7 @@ fx_seal = function(_x, _y, _r) {
 // Last, so every variable and function above already exists when the
 // reply lands.
 post("/newgame", {}, "newgame");
-add_log("Measuring the world into being...");
+add_log("Measuring the world into being...", "ui");
 
 bgm = audio_play_sound(snd_bgm, 1, true);   // 1 = priority, true = loop
 audio_sound_gain(bgm, 0.8, 0);              // half volume; music sits under UI
