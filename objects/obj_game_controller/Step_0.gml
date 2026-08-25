@@ -41,20 +41,6 @@ if (game_over) {
     exit;
 }
 
-// DEBUG: step every court up a tier. Changes outfit, crown and hall
-// together, so you see the whole look rather than a mismatched one.
-// Delete before you ship.
-if (keyboard_check_pressed(vk_f2)) {
-    for (var i = 0; i < N; i++) {
-        var _df = factions[i];
-        _df.tier   = (_df.tier + 1) mod 4;
-        _df.outfit = TIER_NAMES[_df.tier] + "_0";
-        _df.crown  = TIER_NAMES[_df.tier] + "_" + GENDER_NAMES[_df.gender];
-        _df.hall   = _df.tier;
-    }
-    //add_log("debug: tier " + TIER_NAMES[factions[0].tier], "ui");
-}
-
 
 if (scene == "splash") {
     splash_timer += delta_time / 1000000;
@@ -117,16 +103,52 @@ if (scene == "intro") {
         }
     }
  
-    // --- input ---
+        // --- input ---
     if (intro_lock > 0) intro_lock -= _dt;
- 
-    if ((keyboard_check_pressed(vk_space) || keyboard_check_pressed(vk_enter))
-    &&  intro_lock <= 0) {
+
+    // BACK A PAGE. Fully revealed, because you have already read it and
+    // watching it type itself out a second time is a punishment.
+    if (intro_paged && intro_page > 0
+    && (keyboard_check_pressed(vk_left) || keyboard_check_pressed(vk_up)
+     || keyboard_check_pressed(vk_backspace))) {
+        intro_page--;
+        intro_total = intro_page_chars[intro_page];
+        intro_shown = intro_total;
+        intro_done  = true;
+        intro_lock  = INTRO_LOCK;
+        sfx("snd_page");
+        exit;
+    }
+
+    if ((keyboard_check_pressed(vk_space) || keyboard_check_pressed(vk_enter)
+      || keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_down))
+    &&  intro_lock <= 0 && intro_paged) {
         if (!intro_done) {
-            // first press: show me the rest of it
+            // first press: show me the rest of this page
             intro_shown = intro_total;
             intro_done  = true;
             intro_lock  = INTRO_LOCK;
+
+        } else if (intro_page < array_length(intro_pages) - 1) {
+            // PAGE TURN. The letter no longer fits on one screenful, so
+            // finishing a page is not finishing the letter.
+            intro_page++;
+            intro_total = intro_page_chars[intro_page];
+            intro_lock  = INTRO_LOCK;
+            sfx("snd_page");
+
+            // A PAGE YOU HAVE ALREADY SEEN COMES BACK WHOLE. Only genuinely
+            // new pages type themselves out, so flipping forward through
+            // ground you have covered is instant.
+            if (intro_page <= intro_page_max) {
+                intro_shown = intro_total;
+                intro_done  = true;
+            } else {
+                intro_page_max = intro_page;
+                intro_shown = 0;
+                intro_done  = false;
+            }
+
         } else if (link_ok()) {
             // THE GATE: the world has to exist first. Mashing cannot get
             // you into a game whose state has not arrived.
@@ -156,7 +178,9 @@ if (scene == "play" && opt_tutorial && !tut_asked && link_ok()) {
 }
  
 if (tut_prompt) {
-    if (keyboard_check_pressed(vk_left) || keyboard_check_pressed(vk_right))
+    // UP/DOWN, not left/right: the two options are drawn stacked, so
+    // sideways keys were pointing across a list that runs downward.
+    if (keyboard_check_pressed(vk_up) || keyboard_check_pressed(vk_down))
         tut_prompt_pick = 1 - tut_prompt_pick;
     if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
         if (tut_prompt_pick == 0) tut_begin();
@@ -618,6 +642,12 @@ if (plan_room() > 0) {
     if (keyboard_check_pressed(ord("B"))) _vk = "bind";
     if (keyboard_check_pressed(ord("E"))) _vk = "espy";
     if (keyboard_check_pressed(ord("O"))) _vk = "oath";
+    // TWO-TARGET VERBS. The picker at the top of this event already handles
+    // the second pick; these were only ever reachable from the court, and
+    // went away with the meddle options.
+    if (keyboard_check_pressed(ord("X"))) _vk = "poison";
+    if (keyboard_check_pressed(ord("K"))) _vk = "broker";
+	
     if (_vk != "") {
         pending_verb = _vk;
         pending_first = -1;
@@ -639,10 +669,13 @@ if (plan_room() > 0) {
 }
 
 if (keyboard_check_pressed(ord("L"))) {
-    if (factions[ME].treasury < COST_PER_LEVY)
+    // GATE ON WHAT IT ACTUALLY COSTS. apply_resolution charges the batch,
+    // so checking against a single levy let the player buy something the
+    // resolution then silently refused.
+    if (factions[ME].treasury < COST_PER_LEVY * LEVY_BATCH)
         add_log("There is no gold to raise more men.", "ui");
     else
-        plan_add("levy", ME, -1, 1);      // costs gold, not resolve
+        plan_add("levy", ME, -1, 1);
     pending_verb = ""; pending_first = -1;
 }
 

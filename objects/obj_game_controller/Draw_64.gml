@@ -255,13 +255,27 @@ if (scene == "splash") {
 
     var _t = splash_timer;
     var _a;
+    var _rise = 0;      // pixels of settle-into-place on the way in
+
     if (_t < SPLASH_FADE_IN) {
-        _a = _t / SPLASH_FADE_IN;
+        var _p = _t / SPLASH_FADE_IN;
+        // EASED, NOT LINEAR. A linear ramp on a bright logo against black
+        // reads as fully present by about a third of the way through, which
+        // is why it looked like it just appeared. Squaring it keeps the
+        // early frames genuinely dark and puts the visible change late.
+        _a = power(_p, 2.0);
+        // and it drifts up into position as it arrives, so the fade has
+        // something to accompany rather than being the only thing happening
+        _rise = (1 - power(_p, 0.6)) * 7;
+
     } else if (_t < SPLASH_FADE_IN + SPLASH_HOLD) {
         _a = 1;
+
     } else {
         var _ft = _t - (SPLASH_FADE_IN + SPLASH_HOLD);
-        _a = 1 - clamp(_ft / SPLASH_FADE_OUT, 0, 1);
+        var _q = clamp(_ft / SPLASH_FADE_OUT, 0, 1);
+        _a = power(1 - _q, 2.0);
+        _rise = -power(_q, 1.4) * 5;    // and drifts on out the way it came
     }
     _a = clamp(_a, 0, 1);
 
@@ -271,6 +285,10 @@ if (scene == "splash") {
     var _w = sprite_get_width(spr_moth_logo) * _scale;
     var _lx = (640 - _w) / 2;
     var _ly = (360 - _target_h) / 2;
+
+    // one slow breath, same motif and roughly the same rate as the rulers
+    // in the courts, so the whole game moves at one tempo.
+    _ly += fx_bob(0.24, 2.6) + _rise;
 
     draw_set_alpha(_a);
     draw_sprite_ext(spr_moth_logo, 0, _lx, _ly, _scale, _scale, 0, c_white, 1);
@@ -420,9 +438,7 @@ if (scene == "intro") {
     if (!intro_ready) {
         ui_font("body");
         intro_lines = [];
-        intro_total = 0;
         // honour the blank lines between paragraphs
-        var _paras = 0;
         var _buf = "";
         var _n = string_length(LETTER_BODY);
         for (var i = 1; i <= _n + 1; i++) {
@@ -432,7 +448,6 @@ if (scene == "intro") {
                     var _w = ui_wrap(_buf, 470);
                     for (var j = 0; j < array_length(_w); j++) {
                         array_push(intro_lines, _w[j]);
-                        intro_total += string_length(_w[j]);
                     }
                     _buf = "";
                 } else if (i <= _n) {
@@ -442,17 +457,16 @@ if (scene == "intro") {
                 _buf += _ch;
             }
         }
-        intro_total = max(1, intro_total);
         intro_ready = true;
     }
- 
+
     var _lh = ui_line_h();
- 
+
     // --- heading, in the decorative face ---
     // the parchment runs 62..578, and the text starts at 85, so this is the
     // real room available -- not 540, which was wider than the page
     var _t_room = 578 - 85 - 8;
- 
+
     ui_font("title");
     if (string_width(LETTER_TITLE) > _t_room) ui_font("display");
     if (string_width(LETTER_TITLE) > _t_room) ui_font("body");
@@ -460,22 +474,62 @@ if (scene == "intro") {
     ui_text(85, 26, LETTER_TITLE, fx_dim(ui_col("you"), _cand), _t_room);
     ui_font("body");
 
-    // --- the letter, revealed a character at a time ---
+    var _y0 = 26 + _title_h + 14;
+
+    // --- PAGINATE, once the title height is actually known ---
+    // The letter is longer than one screenful now. Before this it was cut
+    // off wherever y passed 268 and the rest was simply never drawn.
+    // A page never STARTS with a paragraph break -- a blank first line
+    // reads as a rendering fault rather than as spacing.
+    if (!intro_paged) {
+        var _per = max(1, floor((268 - _y0) / _lh));
+
+        intro_pages = [];
+        var _cur = [];
+        for (var i = 0; i < array_length(intro_lines); i++) {
+            if (array_length(_cur) == 0 && intro_lines[i] == "") continue;
+            array_push(_cur, intro_lines[i]);
+            if (array_length(_cur) >= _per) {
+                array_push(intro_pages, _cur);
+                _cur = [];
+            }
+        }
+        if (array_length(_cur) > 0) array_push(intro_pages, _cur);
+        if (array_length(intro_pages) == 0) array_push(intro_pages, [""]);
+
+        // characters per page, so the reveal runs one page at a time
+        intro_page_chars = [];
+        for (var i = 0; i < array_length(intro_pages); i++) {
+            var _c = 0;
+            for (var j = 0; j < array_length(intro_pages[i]); j++)
+                _c += string_length(intro_pages[i][j]);
+            array_push(intro_page_chars, max(1, _c));
+        }
+
+        intro_page  = 0;
+        intro_shown = 0;
+        intro_total = intro_page_chars[0];
+        intro_done  = false;
+        intro_paged = true;
+    }
+
+    // --- the current page, revealed a character at a time ---
+    var _pg = intro_pages[intro_page];
+    var _last_page = (intro_page >= array_length(intro_pages) - 1);
     var _budget = floor(intro_shown);
-    var _y = 26 + _title_h + 14;
-    for (var i = 0; i < array_length(intro_lines); i++) {
-        if (_y > 268) break;
-        var _line = intro_lines[i];
-        var _len = string_length(_line);
+    var _y = _y0;
+    for (var i = 0; i < array_length(_pg); i++) {
+        var _line = _pg[i];
+        var _len  = string_length(_line);
         if (_budget <= 0 && _len > 0) break;
         var _cut = (_len <= _budget) ? _line : string_copy(_line, 1, _budget);
         if (_cut != "") ui_text(85, _y, _cut, fx_dim(ui_col("text"), _cand), 470);
         _budget -= _len;
         _y += _lh;
     }
- 
-    // --- signature, only once the letter has finished ---
-    if (intro_done) {
+
+    // --- signature, on the last page only, once it has finished ---
+    if (intro_done && _last_page) {
         ui_font("display");
         var _sgy = min(296, _y + 8);
         ui_text(85, _sgy, LETTER_SIGN, fx_dim(ui_col("faint"), _cand), 470);
@@ -485,8 +539,11 @@ if (scene == "intro") {
         ui_font("body");
         fx_seal(85 + _sgw + 24, _sgy + 10, 11);
     }
- 
+
+    // --- prompts. ONE block, not two: this was drawn twice before. ---
     draw_set_colour(ui_col("faint"));
+    var _pgn = " (" + string(intro_page + 1) + " of "
+             + string(array_length(intro_pages)) + ")";
     if (link == "down") {
         // link_note first: once we have actually given up, the player needs
         // to know that, not a reassuring message about measurement.
@@ -494,21 +551,17 @@ if (scene == "intro") {
     } else if (intro_waiting) {
         ui_text(85, 316, "The oracle has not finished measuring the world...",
                 ui_col("quantum"), 440);
-    } else if (intro_done) {
-        ui_text(85, 316, "SPACE to take the throne", ui_col("you"), 440);
+    } else if (!intro_done) {
+        ui_text(85, 316, "SPACE to read this page at once" + _pgn,
+                ui_col("faint"), 440);
+    } else if (!_last_page) {
+        ui_text(85, 316, (intro_page > 0 ? "SPACE forward   LEFT back"
+                                         : "SPACE to turn the page") + _pgn,
+                ui_col("you"), 440);
     } else {
-        ui_text(85, 316, "SPACE to read it all at once", ui_col("faint"), 440);
-    }
- 
-    // --- prompts ---
-        draw_set_colour(ui_col("faint"));
-    if (intro_waiting) {
-        ui_text(85, 316, "The oracle has not finished measuring the world...",
-                ui_col("quantum"), 440);
-    } else if (intro_done) {
-        ui_text(85, 316, "SPACE to take the throne", ui_col("you"), 440);
-    } else {
-        ui_text(85, 316, "SPACE to read it all at once", ui_col("faint"), 440);
+        ui_text(85, 316, (intro_page > 0 ? "SPACE to take the throne   LEFT back"
+                                         : "SPACE to take the throne") + _pgn,
+                ui_col("you"), 440);
     }
  
     // --- a failed handshake is drawn OVER the letter, not instead of it,
@@ -542,13 +595,6 @@ if (scene == "intro") {
 ui_font("body");
 var L  = ui_layout(N);          // N rows in the roster
 
-if (keyboard_check_pressed(vk_f1)) {
-    show_debug_message("top:     " + string(L.top.x)    + "," + string(L.top.y)    + "  " + string(L.top.w)    + "x" + string(L.top.h));
-    show_debug_message("roster:  " + string(L.roster.x) + "," + string(L.roster.y) + "  " + string(L.roster.w) + "x" + string(L.roster.h));
-    show_debug_message("detail:  " + string(L.detail.x) + "," + string(L.detail.y) + "  " + string(L.detail.w) + "x" + string(L.detail.h));
-    show_debug_message("chron:   " + string(L.chron.x)  + "," + string(L.chron.y)  + "  " + string(L.chron.w) + "x" + string(L.chron.h));
-    show_debug_message("council: " + string(L.council.x)+ "," + string(L.council.y)+ "  " + string(L.council.w) + "x" + string(L.council.h));
-}
 
 var LH = L.lh;
 // ============================================================
@@ -618,9 +664,24 @@ if (audience_of != -1) {
     if (_out < 1) {
  
         for (var i = 0; i < array_length(_person_layers); i++) {
-            var _spr = portrait_sprite(_person_layers[i][0], _person_layers[i][1]);
+            var _lname = _person_layers[i][0];
+            var _spr   = portrait_sprite(_lname, _person_layers[i][1]);
             if (_spr == -1) continue;
-            draw_sprite_stretched(_spr, 0, _ax + _pdx, _ay + _pdy, _aw, _ah);
+
+            // ONE OUTFIT SPRITE PER TIER, drawn to the slender build and
+            // widened for the stocky one. Cloth has no landmark the eye can
+            // check against the head, unlike hair, so a horizontal stretch
+            // reads as a bigger body rather than as distorted art.
+            // HEIGHT IS NEVER TOUCHED. The shoulders have to stay level with
+            // the neck on every build or the head looks detached.
+            var _sx = _ax + _pdx, _sw = _aw;
+            if (_lname == "outfit" && _f.build == 1) {
+                var _wide = _aw * 0.07;
+                _sx -= _wide * 0.5;     // grow outward from the centre
+                _sw += _wide;
+            }
+
+            draw_sprite_stretched(_spr, 0, _sx, _ay + _pdy, _sw, _ah);
             _any = true;
         }
  
@@ -1035,8 +1096,8 @@ if (_s.vassal_of != -1) {
     ui_row(_dp, "self", self_word(_s.independence), ui_col("quantum"));
  
     // army and land on one line: two small numbers do not each deserve a row
-    ui_row(_dp, "force", string(_s.army) + " under arms, " + string(_s.holds)
-                       + " held", ui_col("text"));
+    ui_row(_dp, "force", string(_s.army) + " troops, " + string(_s.holds)
+                       + " lands", ui_col("text"));
  
     var _bv = bonds[ME][selected];
     ui_row(_dp, "bond", bond_word(_bv) + "  (" + string_format(_bv, 1, 2) + ")",
@@ -1316,8 +1377,9 @@ if (phase == "resolving") {
         + " left", ui_col("faint"), _np.inner_w);
 
 } else {
-    var _verbs = [["A","attack"],["S","aid"],["B","bind"],["O","oath"],
-                  ["F","lean"],["E","espy"],["L","levy"]];
+	var _verbs = [["A","attack"],["S","aid"],["B","bind"],["O","oath"],
+                  ["F","lean"],["E","espy"],["L","levy"],
+                  ["X","poison"],["K","broker"]];
  
     // Two rows, filled greedily. The footer needs the last line, so the
     // verbs get everything above it.
@@ -1374,47 +1436,78 @@ if (phase == "events" && event_current != undefined) {
     draw_rectangle(0, 0, 640, 360, false);
     draw_set_alpha(1);
 
-    var CX = 128, CY = 40, CWD = 384, CHT = 280;
+    var CX = 128, CWD = 384;
+
+    // MEASURE FIRST, then size the card. It was a fixed 280 tall with a
+    // fixed 150 of that spent on the picture, which left about one line for
+    // the body -- and then the choice loop's ui_room guard broke before
+    // drawing anything, so a card with options showed none of them while
+    // Step still cycled and applied them. The player chose blind.
+    ui_font("display");
+    var _tith = string_height("Ay") + 3;
+    ui_font("body");
+
+    var _bl = 0;
+    var _bp = string_split(_e.body, "\n");
+    for (var _bi = 0; _bi < array_length(_bp); _bi++)
+        _bl += (_bp[_bi] == "") ? 1 : array_length(ui_wrap(_bp[_bi], CWD - 20));
+
+    var _nch = array_length(_e.choices);
+
+    // everything the card needs except the picture
+    var _need = 8 + _tith + _bl * LH + 4 + _nch * LH + LH + 12;
+
+    // THE PICTURE GETS WHAT IS LEFT, and is dropped rather than squashed
+    // when the text needs the room. Text wins: an unreadable card is worse
+    // than a card with no art.
+    var CHT = min(336, _need + 158);
+    var _ah = CHT - _need - 8;
+    if (_ah < 76) { _ah = 0; CHT = min(336, _need); }
+    var CY = max(12, floor((360 - CHT) / 2));
+
     draw_set_colour(make_colour_rgb(13, 15, 20));
     draw_rectangle(CX, CY, CX + CWD, CY + CHT, false);
     draw_set_colour(ui_col("you"));
     draw_rectangle(CX, CY, CX + CWD, CY + CHT, true);
 
-    // ---- 368x150 illustration slot ----
-    var _ax = CX + 8, _ay = CY + 8, _aw = 368, _ah = 150;
-    var _spr = event_art(_e.kind);
-    if (_spr != -1) {
-        draw_sprite_stretched(_spr, 0, _ax, _ay, _aw, _ah);
-    } else {
-        draw_set_colour(make_colour_rgb(28, 33, 43));
-        draw_rectangle(_ax, _ay, _ax + _aw, _ay + _ah, false);
-        draw_set_colour(ui_col("faint"));
-        draw_rectangle(_ax, _ay, _ax + _aw, _ay + _ah, true);
-        ui_font("label");
-        ui_text(_ax + 6, _ay + _ah - 13, _e.kind + "   368x150",
-                ui_col("faint"), _aw - 12);
-        ui_font("body");
+    // ---- illustration, authored 368x150, aspect kept ----
+    var _cur = CY + 8;
+    if (_ah > 0) {
+        var _aw = min(368, _ah * (368 / 150));
+        var _ax = CX + floor((CWD - _aw) / 2);
+        var _ay = CY + 8;
+        var _spr = event_art(_e.kind);
+        if (_spr != -1) {
+            draw_sprite_stretched(_spr, 0, _ax, _ay, _aw, _ah);
+        } else {
+            draw_set_colour(make_colour_rgb(28, 33, 43));
+            draw_rectangle(_ax, _ay, _ax + _aw, _ay + _ah, false);
+            draw_set_colour(ui_col("faint"));
+            draw_rectangle(_ax, _ay, _ax + _aw, _ay + _ah, true);
+        }
+        _cur = _ay + _ah + 8;
     }
 
     // a hand-rolled panel struct, since the card is not part of ui_layout
     var _tp = {
         x: CX + 10, y: CY, w: CWD - 20,
         inner_w: CWD - 20,
-        cursor: _ay + _ah + 8,
+        cursor: _cur,
         bottom: CY + CHT - LH - 8
     };
 
     ui_font("display");
     ui_text(_tp.x, _tp.cursor, _e.title, ui_col("you"), _tp.inner_w);
-    _tp.cursor += string_height("Ay") + 3;
+    _tp.cursor += _tith;
     ui_font("body");
 
     ui_para(_tp, _e.body, ui_col("text"));
     _tp.cursor += 4;
 
-    if (array_length(_e.choices) > 0) {
-        for (var i = 0; i < array_length(_e.choices); i++) {
-            if (ui_room(_tp) < LH) break;
+    // NO ui_room GUARD ON THE CHOICES. The card is now sized to hold them,
+    // and a choice the player cannot see is not a choice.
+    if (_nch > 0) {
+        for (var i = 0; i < _nch; i++) {
             var _sel = (i == event_pick);
             ui_text(_tp.x, _tp.cursor,
                     (_sel ? "> " : "  ") + _e.choices[i].label,
@@ -1455,7 +1548,7 @@ if (tut_prompt) {
                 _sel ? ui_col("you") : ui_col("dim"), _pp.inner_w);
         _pp.cursor += ui_line_h();
     }
-    ui_text(_pp.x, ui_footer_y(_pp), "LEFT/RIGHT choose   ENTER",
+    ui_text(_pp.x, ui_footer_y(_pp), "UP/DOWN choose   ENTER",
 		ui_col("faint"), _pp.inner_w);
     exit;
 }
@@ -1485,9 +1578,22 @@ if (tut_active) {
         draw_rectangle(_box.x - 2, _box.y - 2,
                        _box.x + _box.w + 2, _box.y + _box.h + 2, true);
     }
- 
+
+    // MEASURE THE CARD BEFORE DRAWING IT. The height was a fixed 116, which
+    // only worked as long as no body wrapped past it. Fonts have to be set
+    // before measuring, since every width and height here is font-relative.
+    ui_font("display");
+    var _tith = string_height("Ay") + 2;
+    ui_font("body");
+
+    var _blines = 0;
+    var _bparas = string_split(_c.body, "\n");
+    for (var _bi = 0; _bi < array_length(_bparas); _bi++)
+        _blines += (_bparas[_bi] == "")
+                 ? 1 : array_length(ui_wrap(_bparas[_bi], 588));
+
     // the card itself, bottom of the screen, over the council area
-    var CH = 116;
+    var CH = clamp(8 + _tith + _blines * _lh3 + 4 + _lh3 + 8, 116, 180);
     var CY = 360 - CH - 6;
     draw_set_alpha(0.94);
     draw_set_colour(make_colour_rgb(10, 12, 17));

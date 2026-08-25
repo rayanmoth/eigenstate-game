@@ -238,14 +238,31 @@ function ui_wrap(_str, _maxw) {
 /// Wrapped, bounded paragraph.
 function ui_para(_p, _str, _col) {
     var _lh = ui_line_h();
-    var _lines = ui_wrap(_str, _p.inner_w);
-    for (var i = 0; i < array_length(_lines); i++) {
-        if (ui_room(_p) < _lh) break;
-        ui_text(_p.x, _p.cursor, _lines[i], _col, _p.inner_w);
-        _p.cursor += _lh;
+    var _used = 0;
+
+    // SPLIT ON NEWLINES FIRST. ui_wrap only breaks on spaces, so a "\n"
+    // inside the string survived into a "word" and draw_text rendered it as
+    // a real line break: two lines drawn, one line of cursor movement, and
+    // whatever came next landed on top of it. That is the overlapping text
+    // in the tutorial cards.
+    var _paras = string_split(string(_str), "\n");
+    for (var p = 0; p < array_length(_paras); p++) {
+        if (_paras[p] == "") {
+            if (ui_room(_p) < _lh) break;
+            _p.cursor += _lh;          // a deliberate blank line
+            _used += _lh;
+            continue;
+        }
+        var _lines = ui_wrap(_paras[p], _p.inner_w);
+        for (var i = 0; i < array_length(_lines); i++) {
+            if (ui_room(_p) < _lh) break;
+            ui_text(_p.x, _p.cursor, _lines[i], _col, _p.inner_w);
+            _p.cursor += _lh;
+            _used += _lh;
+        }
     }
+    return _used;
 }
- 
 /// The log. Newest first, wrapped to the panel, and it STOPS when it runs
 /// out of vertical room rather than drawing past the panel edge. Whole
 /// entries only -- half an entry reads as a rendering glitch.

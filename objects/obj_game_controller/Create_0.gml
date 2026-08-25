@@ -7,9 +7,11 @@ display_set_gui_size(640, 360);
 scene = "splash";          // "splash" | "title" | "intro" | "play"
 
 splash_timer    = 0;       // seconds since the splash began
-SPLASH_FADE_IN  = 1.0;
-SPLASH_HOLD     = 1.4;
-SPLASH_FADE_OUT = 1.0;
+SPLASH_FADE_IN  = 0.8;
+SPLASH_HOLD     = 0.7;
+SPLASH_FADE_OUT = 0.8;
+
+MUSIC_GAIN = 1.4;   // headroom on top of the slider. snd_bgm is mastered quiet.
 
 INTRO_SPEED_BASE = 32;
  
@@ -30,6 +32,14 @@ INTRO_LOCK  = 0.35;       // long enough that one burst of taps cannot
 intro_ready    = false;   // lines built yet (needs a font, so done in Draw)
 intro_done     = false;   // letter fully revealed
 intro_waiting  = false;   // finished, but the oracle has not answered
+
+intro_pages       = [];    // the letter, cut into screenfuls
+intro_page_chars  = [];    // characters on each page, for the reveal
+intro_page        = 0;     // which screenful is up
+intro_paged       = false; // pagination done? needs the title height first
+intro_page_max    = 0;     // furthest page reached, so revisits do not re-type
+
+
 help_page = 0;       // 0 = how to play, 1 = the quantum
 
 measuring_queue    = [];   // battles awaiting a "measurement" beat
@@ -88,22 +98,46 @@ retry_link = function() {
 }
  
 LETTER_TITLE = "To the Regent of Eigenstate";
- 
-LETTER_BODY =
-"I have a season left, maybe less. The crown is yours now, so here is "
-+ "what you actually need to know.\n\n"
-+ "Four kingdoms border us: Coherre, Decohra, Phasemark, Nullhold. None "
-+ "are friends and none are fixed enemies. Push one too hard and it turns "
-+ "on you. Tie yourself too closely to one and you lose the ability to "
-+ "act against it later - that is not advice, it is how this world "
-+ "works. Every court's mood and every bond between courts can shift, "
-+ "and every shift has a cost.\n\n"
-+ "You have two years. Each month you choose: attack, make peace, build "
-+ "up your own strength, or wait. What actually happens depends on them "
-+ "as much as you.\n\n"
-+ "Survive it and rule however you like. Act wisely.";
 
-LETTER_SIGN = "-- Aurel, the (former) king of Eigenstate";
+LETTER_BODY =
+"Regent - and that is your title from the moment you break this seal - I "
++ "am placing Eigenstate in your hands for exactly two years, and I am "
++ "naming you its regent to do it.\n\n"
++ "Twenty-four months. Not roughly, not thereabouts. I am going to the "
++ "coast on the orders of a physician I pay far too much, who assures me "
++ "the sea air will add ten years to my life. That is a bold claim to "
++ "make about air. I intend to hold him to it.\n\n"
++ "I chose you deliberately. Not the council, who cannot agree on lunch. "
++ "Not my nephew, who is a delightful boy and would have this kingdom "
++ "alight by autumn. You. When I asked what you would do about our "
++ "neighbours, you stopped and thought before answering. In this building "
++ "that is very nearly a miracle.\n\n"
++ "Four kingdoms share our borders: Coherre, Decohra, Phasemark and "
++ "Nullhold. I will tell you nothing about who rules them, because by the "
++ "time you take my chair I may well be wrong. Thrones change hands. "
++ "Tempers are inherited. The court that spent my whole reign smiling at "
++ "me may spend yours sharpening something. Go and find out for yourself, "
++ "in person, and look at their faces while they answer you.\n\n"
++ "You will have more room to act than you expect. You can march on them "
++ "or calm them. You can tie a kingdom to you, or spend a season quietly "
++ "buying what its own ministers know. You can turn two of them against "
++ "each other without ever leaving your hall, or make peace between them "
++ "for reasons entirely your own. You can swear a promise that will not "
++ "come due for a year and then live with whatever the year does to it. "
++ "Most of what you can do here I never tried. Some of it I tried once "
++ "and would rather not discuss.\n\n"
++ "Understand this much and the rest will teach itself: everything here "
++ "is tied to everything else. Hold a neighbour close and you will find "
++ "you have bound your own hands in the same knot. Nothing is settled "
++ "until something forces it to settle, and when it settles it settles "
++ "for everyone at once. That is why no two reigns of Eigenstate have "
++ "ever run the same way, and it is why I am so unbothered about handing "
++ "you mine.\n\n"
++ "Twenty-four months, Regent. Rule it however you see fit. I have left "
++ "no instructions beyond this letter and I will not be reachable.\n\n"
++ "Try not to lose the place. I have grown rather fond of it.";
+
+LETTER_SIGN = "-- Aurel, King of Eigenstate, absent but not yet dead";
 
  
  
@@ -366,7 +400,8 @@ HELP_PAGES = [
         ["S aid",        "calm their unrest, soften them toward you"],
         ["B bind",       "strengthen a bond. costs you freedom to act later"],
         ["E espy",       "send agents. refreshes what you know of a court"],
-        ["L levy",       "raise men. costs gold but not an action point"],
+        ["L levy",       "raise " + string(LEVY_BATCH) + " men for "
+                       + string(COST_PER_LEVY * LEVY_BATCH) + " gold. costs an action"],
         ["", ""],
         ["--- IN THEIR COURT (V) ---", ""],
         ["ask about",    "what they know, if they like you enough to say"],
@@ -405,14 +440,11 @@ HELP_PAGES = [
 settings_apply = function() {
     // Desktop only. In a browser the page owns fullscreen, because only the
     // page receives the user gesture the browser requires.
-    if (os_type != os_browser) {
-        if (window_get_fullscreen() != opt_fullscreen)
-            window_set_fullscreen(opt_fullscreen);
-    }
+    
     intro_speed = INTRO_SPEED_BASE * opt_textspeed;
  
     if (bgm != undefined && audio_is_playing(bgm))
-        audio_sound_gain(bgm, opt_music, 0);
+        audio_sound_gain(bgm, opt_music * MUSIC_GAIN, 0);
  
     // only touch the throne theme if it is actually up, or this would
     // un-duck it while the player is stood on the map
@@ -445,21 +477,28 @@ settings_input = function() {
         if (keyboard_check(vk_left))  _step = -1;
     }
  
-    // ROWS BY NAME, not index. The browser build drops the fullscreen row, so
+    // ROWS BY NAME, not index. The browser build drops the quit row, so
     // every index below it shifts and an index-based version would put the
     // music slider on the tutorial toggle.
     var _kind = SETTING_ROWS[set_pick][1];
     var _row  = SETTING_ROWS[set_pick][0];
  
-    if (_kind == "toggle") {
+    if (_kind == "action") {
+        // ENTER ONLY. Not left or right: an action row has no value to
+        // nudge, and quitting on a stray arrow key would be unforgivable.
+        if (keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
+            if (_row == "quit game") { sfx("snd_ui_confirm"); game_end(); }
+        }
+ 
+    } else if (_kind == "toggle") {
         if (keyboard_check_pressed(vk_right) || keyboard_check_pressed(vk_left)
          || keyboard_check_pressed(vk_enter) || keyboard_check_pressed(vk_space)) {
-            if (_row == "fullscreen")     opt_fullscreen = !opt_fullscreen;
-            if (_row == "offer tutorial") opt_tutorial   = !opt_tutorial;
+            if (_row == "offer tutorial") opt_tutorial = !opt_tutorial;
             settings_apply();
             settings_save();
             sfx("snd_ui_confirm");
         }
+ 
     } else if (_step != 0) {
         var _d = _step * 0.02;
         if (_row == "music")      opt_music     = clamp(opt_music + _d, 0, 1);
@@ -494,18 +533,23 @@ settings_panel_draw = function(_footer) {
     for (var i = 0; i < array_length(SETTING_ROWS); i++) {
         var _sel = (i == set_pick);
         var _row = SETTING_ROWS[i][0];
+        var _knd = SETTING_ROWS[i][1];
         var _col = _sel ? ui_col("you") : ui_col("dim");
         ui_text(_sp.x, _sp.cursor, (_sel ? "> " : "  ") + _row, _col, _lblw);
  
         var _vx = _sp.x + _lblw;
  
-        // ROWS ARE ADDRESSED BY NAME, not index. The browser build drops the
-        // fullscreen row, so every index below it shifts and an index-based
-        // version would put the music slider on the tutorial toggle.
-        if (SETTING_ROWS[i][1] == "toggle") {
-            var _on = (_row == "fullscreen") ? opt_fullscreen : opt_tutorial;
+        // ROWS ARE ADDRESSED BY NAME, not index, for the same reason as in
+        // settings_input.
+        if (_knd == "action") {
+            // no value, just the confirm hint, and only when it is selected
+            if (_sel) ui_text(_vx, _sp.cursor, "ENTER", ui_col("faint"));
+ 
+        } else if (_knd == "toggle") {
+            var _on = opt_tutorial;
             ui_text(_vx, _sp.cursor, _on ? "on" : "off",
                     _on ? ui_col("ally") : ui_col("faint"));
+ 
         } else {
             var _v = opt_music;
             if (_row == "sound")      _v = opt_sfx;
@@ -550,7 +594,8 @@ menu_pick  = 0;
 menu_page  = "root";     // "root" | "settings" | "quantum"
  
 if (os_type == os_browser) {
-    // no fullscreen row: the page's corner button and double-click do it
+    // no quit row: closing a browser tab is not the game's business, and
+    // game_end() in a browser just leaves a dead canvas on screen
     SETTING_ROWS = [
         ["music",          "slider"],
         ["sound",          "slider"],
@@ -559,11 +604,11 @@ if (os_type == os_browser) {
     ];
 } else {
     SETTING_ROWS = [
-        ["fullscreen",     "toggle"],
         ["music",          "slider"],
         ["sound",          "slider"],
         ["text speed",     "slider"],
         ["offer tutorial", "toggle"],
+        ["quit game",      "action"],
     ];
 }
 
@@ -692,9 +737,8 @@ TUTORIAL = [
           + "not just both happen. They combine. Marching on someone you "
           + "are also trying to bind pulls one measurement two ways." },
     { focus: "oaths",   title: "Oaths",
-      body: "Press O to swear something. Pick who, then what kind, what "
-          + "sort of pressure it is made of, how many months it runs, and "
-          + "how much of yourself is behind it.\n"
+      body: "Press O to swear something. Pick who, then what kind, how "
+          + "many months it runs, and how much of yourself is behind it.\n"
           + "It does not resolve now. It goes on the board where everyone "
           + "can see it." },
     { focus: "oaths",   title: "The board is shared",
@@ -1320,6 +1364,7 @@ rival_act = function(_i) {
                 if (_s > _best_score) { _best_score = _s; _best = ["oath_siege", t, -1]; }
             }
         }
+	}
 
     // ---- POISON two others (never involving itself) ----
     for (var a = 0; a < N; a++) {
@@ -1399,7 +1444,6 @@ rival_act = function(_i) {
         break;
     }
     return true;
-	}
 }
 
  
@@ -1413,7 +1457,8 @@ rival_act = function(_i) {
 // file without ever writing it -- this is that missing piece.)
 // ============================================================
 year_economy = function() {
-for (var i = 0; i < N; i++) {
+	unrest_why = [];        // fresh every month, or the line grows forever
+	for (var i = 0; i < N; i++) {
             var _f = factions[i];
             if (!_f.alive) continue;
  
@@ -1491,12 +1536,6 @@ for (var i = 0; i < N; i++) {
                             -_allies * 3);
             }
             _f.unrest = max(0, _f.unrest);
- 
-			// ...and at the very TOP of year_economy, before the `for` loop:
-			//
-			unrest_why = [];
-			//
-			// Fresh every month, or the line grows forever.
  
             // (4) civil war, not deletion
             if (_f.unrest >= UNREST_MAX) {
@@ -1613,7 +1652,8 @@ plan_effect = function(_p) {
         case "espy":
             return "1 act.  fresh word from their court";
         case "levy":
-            return string(COST_PER_LEVY) + "g, free.  more men";
+            return string(COST_PER_LEVY * LEVY_BATCH) + "g.  "
+                 + string(LEVY_BATCH) + " more men";
         case "poison":
             return "1 act.  sets " + factions[_p.a].name + " against "
                  + factions[_p.b].name;
@@ -2095,7 +2135,7 @@ audience_close = function() {
     audience_of = -1;
     if (throne_bgm != undefined && audio_is_playing(throne_bgm))
         audio_sound_gain(throne_bgm, 0, 600);
-    if (bgm != undefined && audio_is_playing(bgm)) audio_sound_gain(bgm, opt_music, 600);
+    if (bgm != undefined && audio_is_playing(bgm)) audio_sound_gain(bgm, opt_music * MUSIC_GAIN, 600);
 }
 
 
@@ -2725,12 +2765,15 @@ apply_resolution = function(_answers) {
             case "espy":
                 array_push(pending_scouts, _p.a);
             break;
+			
             case "levy":
                 var _c = COST_PER_LEVY * LEVY_BATCH;
                 if (factions[ME].treasury >= _c) {
                     factions[ME].treasury -= _c;
                     factions[ME].army += LEVY_BATCH;
                     add_log("You raise " + string(LEVY_BATCH) + " levies.", "gold");
+                } else {
+                    add_log("The levy could not be paid for.", "gold");
                 }
             break;
         }
@@ -2989,7 +3032,6 @@ plan_add_oath = function(_t) {
     array_push(plan, {
         verb: "oath", a: _t, b: -1, cost: 1,
         kind:     OATH_KINDS[oath_kind].key,
-        axis:     OATH_AXES[oath_axis].key,
         span:     oath_span,
         strength: OATH_STRENGTHS[oath_str],
 		axis:     OATH_KINDS[oath_kind].axis
@@ -3338,7 +3380,7 @@ music_kick = function() {
     bgm_started = true;
     audio_resume_all();
     bgm = audio_play_sound(snd_bgm, 1, true);
-    audio_sound_gain(bgm, opt_music, 0);
+    audio_sound_gain(bgm, opt_music * MUSIC_GAIN, 0);
 }
 
 music_kick();   // fires immediately on desktop, no-ops in a browser
