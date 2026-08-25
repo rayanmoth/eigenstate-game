@@ -69,10 +69,10 @@ link_note = "";
 // game needs no local Python at all -- no venv, no launcher, nothing to
 // autostart, because there is nothing local to start.
 
-SERVER_BASE = "http://localhost:5055";
-//SERVER_BASE = "https://eigenstate-ten.vercel.app";
-
-SERVER_KEY = "100f7c1643dfb813c59b141b";
+SERVER_BASE = (os_type == os_browser)
+            ? ""
+            : "https://eigenstate-ten.vercel.app";
+SERVER_KEY  = "100f7c1643dfb813c59b141b";
  
 // The authoritative world state. undefined until /newgame hands one back,
 // which is how the server knows to create one rather than load one.
