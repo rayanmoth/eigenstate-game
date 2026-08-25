@@ -9,6 +9,8 @@
 // handler. A year is not over until the player has seen what happened.
 // ============================================================
 
+music_kick();
+
 // Knock until it answers or we run out of patience. Deliberately NOT
 // gated on server_spawn_tried: the server being slow to boot has nothing
 // to do with who started it.

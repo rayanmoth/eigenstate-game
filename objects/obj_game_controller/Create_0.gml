@@ -1697,14 +1697,19 @@ make_leader = function(_i, _bits) {
     // stay independent for cross-cutting variance
     _f.tier      = bits_val(_bits, 9, 2);
     _f.outfit_v  = 0
-    _f.hair      = bits_val(_bits, 12, 2);
     _f.build     = bits_val(_bits, 14, 1);
     _f.hall      = _f.tier;
 
     // skin has no bit left to measure from -- plain random, same fallback
     // pattern as temper's schemer/diplomat split
     _f.skin      = irandom(3);
-	_f.face_type = irandom(2);
+		_f.face_type = irandom(2);
+
+    // MOUTHS ARE THEIR OWN AXIS NOW, two variants instead of three, because
+    // the eyes have three and there is no reason the two sets have to be
+    // the same size. Shared before, which meant one missing mouth sprite
+    // took a whole eye variant with it.
+	_f.mouth_type = irandom(1);
 	
     _f.head      = GENDER_NAMES[_gender] + "_" + BUILD_NAMES[_f.build]
                                           + "_" + SKIN_NAMES[_f.skin];
@@ -1713,7 +1718,15 @@ make_leader = function(_i, _bits) {
 	
 	_f.crown = TIER_NAMES[_f.tier] + "_" + GENDER_NAMES[_gender];
 
-}
+        // Hair is gendered AND build-specific, so it is built as a name here the
+    // way the head is, rather than left as a bare index. portrait_sprite
+    // stays ignorant of all of it and only concatenates.
+    // Two bits give 0-3 and there are three variants, so 3 folds back onto
+    // 0. A mild bias toward variant 0, not worth a fourth bit.
+    // MUST BE AFTER _f.build IS ASSIGNED ABOVE, or this reads undefined.
+    _f.hair = GENDER_NAMES[_gender] + "_" + BUILD_NAMES[_f.build] + "_"
+            + string(bits_val(_bits, 12, 2) mod 3);
+	}
 
 blink_timer = random_range(2, 5);
 blink_hold  = 0;
@@ -1732,7 +1745,7 @@ face_eyes_spr = function(_i) {
 
 face_mouth_spr = function(_i) {
     var _f = factions[_i];
-    return asset_get_index("spr_mouth_" + GENDER_NAMES[_f.gender] + "_" + string(_f.face_type));
+    return asset_get_index("spr_mouth_" + GENDER_NAMES[_f.gender] + "_" + string(_f.mouth_type));
 }
 
 face_eyes_frame = function(_i) {
@@ -1777,7 +1790,7 @@ portrait_sprite = function(_layer, _index) {
 	if (_layer == "crown") return asset_get_index("spr_crown_" + string(_index));
     // if (_layer == "build")  return asset_get_index("spr_build_" + string(_index));
     if (_layer == "outfit") return asset_get_index("spr_outfit_" + string(_index));
-    // if (_layer == "hair")   return asset_get_index("spr_hair_" + string(_index));
+    if (_layer == "hair")   return asset_get_index("spr_hair_" + string(_index));
     // if (_layer == "face")   return asset_get_index("spr_face_" + string(_index));
     return -1;
 }
@@ -2159,7 +2172,7 @@ JBIT_USHER  = 0.85;
 JBIT_ENTER  = 1.10;
 JBIT_BOOM   = 0.60;
 JBIT_RETURN = 0.90;
-JESTER_GAIN = 1.8;      // snd_jester is mastered quiet, so lift it
+JESTER_GAIN = 1.2;      // snd_jester is mastered quiet, so lift it
  
 JESTER_SCALE = 2;       // 32x32 art at 2x inside the 320x180 illustration
 JESTER_FPS   = 4;
@@ -3308,7 +3321,26 @@ fx_seal = function(_x, _y, _r) {
 post("/newgame", {}, "newgame");
 add_log("Measuring the world into being...", "ui");
 
-bgm = audio_play_sound(snd_bgm, 1, true);   // 1 = priority, true = loop
-audio_sound_gain(bgm, opt_music, 0);
+// HTML5 BROWSERS REFUSE AUDIO UNTIL THE PAGE HAS HAD A REAL USER GESTURE.
+// Music started here, on frame one, is suspended and stays silent for the
+// whole session -- which is why the court and jester themes always worked
+// and this one never did. They start after a keypress. So on the web we
+// wait for one. On desktop there is no such rule, so nothing changes there.
+bgm = undefined;
+bgm_started = false;
+
+music_kick = function() {
+    if (bgm_started) return;
+    if (os_type == os_browser
+     && !keyboard_check_pressed(vk_anykey)
+     && !mouse_check_button_pressed(mb_any)) return;
+
+    bgm_started = true;
+    audio_resume_all();
+    bgm = audio_play_sound(snd_bgm, 1, true);
+    audio_sound_gain(bgm, opt_music, 0);
+}
+
+music_kick();   // fires immediately on desktop, no-ops in a browser
 
 settings_apply();
