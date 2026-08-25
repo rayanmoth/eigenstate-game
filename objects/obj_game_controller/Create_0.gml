@@ -552,7 +552,7 @@ settings_input = function() {
 
 
 settings_panel_draw = function(_footer) {
-    var _sp  = ui_panel(140, 60, 360, 240, "SETTINGS");
+    var _sp  = ui_panel(140, 46, 360, 288, "SETTINGS");
     var _slh = ui_line_h();
  
     // the browser build prints a second footer line about fullscreen, so it
@@ -649,6 +649,7 @@ if (os_type == os_browser) {
         ["text speed",     "slider"],
         ["offer tutorial", "toggle"],
         ["quit game",      "action"],
+		["quantum key",    "action"],
     ];
 }
 

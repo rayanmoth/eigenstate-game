@@ -1381,6 +1381,35 @@ if (phase == "resolving") {
  
         _np.cursor += LH;
     }
+
+    // THE VERBS STAY VISIBLE. Queueing one action replaced the entire verb
+    // list with the queue, so for the rest of the month the player had no
+    // list of what else they could do. This belongs INSIDE this branch and
+    // nowhere else -- outside it, it draws on top of the full verb list.
+    if (plan_room() > 0 && ui_room(_np) >= LH) {
+        ui_font("label");
+        var _short = [["A","atk"],["S","aid"],["B","bind"],["O","oath"],
+                      ["F","lean"],["E","espy"],["L","levy"],
+                      ["X","pois"],["K","brok"]];
+        var _rx = _np.x, _ry = _np.cursor - 4, _rhid = 0;
+        for (var i = 0; i < array_length(_short); i++) {
+            var _rc = _short[i][0] + " " + _short[i][1];
+            var _rw = string_width(_rc) + 10;
+            if (_rx + _rw > _np.x + _np.inner_w) {
+                _rhid = array_length(_short) - i;
+                break;
+            }
+            ui_text(_rx, _ry, _short[i][0], ui_col("you"));
+            ui_text(_rx + string_width(_short[i][0] + " "), _ry,
+                    _short[i][1], ui_col("dim"));
+            _rx += _rw;
+        }
+        if (_rhid > 0)
+            ui_text_right(_np.x + _np.inner_w, _ry,
+                          "+" + string(_rhid) + " (H)", ui_col("quantum"));
+        ui_font("body");
+        _np.cursor += LH;
+    }
  
     ui_text(_np.x, _np.bottom - LH,
         "ENTER commit the month    BACKSPACE undo    " + string(plan_room())
@@ -1421,6 +1450,7 @@ if (phase == "resolving") {
     if (_hidden > 0)
         ui_text_right(_np.x + _np.inner_w, _vy, "+" + string(_hidden)
                       + " more (H)", ui_col("quantum"));
+					  		 
  
     // FOOTER. H and Q were nowhere on screen, which made the only two
     // explanatory screens in the game undiscoverable.
@@ -1604,7 +1634,15 @@ if (tut_active) {
 
     // the card itself, bottom of the screen, over the council area
     var CH = clamp(8 + _tith + _blines * _lh3 + 4 + _lh3 + 8, 116, 240);
+    
+	// PUT THE CARD OPPOSITE WHAT IT IS POINTING AT. It lived at the bottom
+    // permanently, and the cards about acting point at the council panel,
+    // which is also at the bottom -- so the explanation sat on top of the
+    // thing being explained. Driven off the panel's own rect rather than a
+    // list of focus names, so a new card lands correctly for free.
     var CY = 360 - CH - 6;
+    if (is_struct(_box) && (_box.y + _box.h * 0.5) > 180) CY = 6;
+	
     draw_set_alpha(0.94);
     draw_set_colour(make_colour_rgb(10, 12, 17));
     draw_rectangle(14, CY, 626, CY + CH, false);
